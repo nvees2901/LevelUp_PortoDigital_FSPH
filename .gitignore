@@ -24,3 +24,9 @@ Thumbs.db
 # IDE
 .vscode/
 .idea/
+
+# Local tooling
+.claude/
+
+# Local vector database
+backend/chroma_db/
