@@ -1,0 +1,160 @@
+[
+  {
+    "id": 1,
+    "nome": "Publicidade Obrigatória no PNCP",
+    "artigo": "Art. 174",
+    "descricao": "Validação da divulgação centralizada e obrigatória dos editais, atas e contratos no Portal Nacional de Contratações Públicas (PNCP).",
+    "peso": 10,
+    "keywords": [
+      "PNCP",
+      "portal nacional",
+      "divulgação",
+      "publicação",
+      "edital",
+      "contratações públicas"
+    ]
+  },
+  {
+    "id": 2,
+    "nome": "Preferência pela Forma Eletrônica",
+    "artigo": "Art. 17, § 2º",
+    "descricao": "A licitação deve ocorrer, preferencialmente, na forma eletrônica, exigindo-se motivação expressa para a forma presencial.",
+    "peso": 10,
+    "keywords": [
+      "eletrônico",
+      "eletrônica",
+      "forma eletrônica",
+      "presencial",
+      "motivação",
+      "licitação eletrônica"
+    ]
+  },
+  {
+    "id": 3,
+    "nome": "Inversão de Fases",
+    "artigo": "Art. 17, § 1º",
+    "descricao": "Validação do rito procedimental onde o julgamento das propostas antecede a habilitação, sendo a habilitação realizada apenas para o licitante mais bem classificado.",
+    "peso": 10,
+    "keywords": [
+      "inversão de fases",
+      "habilitação",
+      "proposta",
+      "classificado",
+      "julgamento",
+      "licitante vencedor"
+    ]
+  },
+  {
+    "id": 4,
+    "nome": "Critérios de Julgamento",
+    "artigo": "Art. 33",
+    "descricao": "Validação da proposta vencedora baseada nos critérios definidos: Menor Preço, Maior Desconto, Melhor Técnica, Técnica e Preço, Maior Lance ou Maior Retorno Econômico.",
+    "peso": 10,
+    "keywords": [
+      "menor preço",
+      "maior desconto",
+      "melhor técnica",
+      "técnica e preço",
+      "maior lance",
+      "retorno econômico",
+      "critério de julgamento"
+    ]
+  },
+  {
+    "id": 5,
+    "nome": "Regularidade Fiscal e Trabalhista",
+    "artigo": "Art. 70, III",
+    "descricao": "Consulta integrada à base de dados para validação da documentação (SICAF/CNDs), exigida apenas do vencedor após a fase de propostas.",
+    "peso": 10,
+    "keywords": [
+      "SICAF",
+      "CND",
+      "regularidade fiscal",
+      "regularidade trabalhista",
+      "documentação",
+      "certidão negativa",
+      "habilitação fiscal"
+    ]
+  },
+  {
+    "id": 6,
+    "nome": "Exequibilidade das Propostas",
+    "artigo": "Art. 59, III",
+    "descricao": "Validação automática se o valor da proposta é compatível com os custos de mercado, bloqueando propostas inexequíveis com base no orçamento estimado.",
+    "peso": 10,
+    "keywords": [
+      "exequibilidade",
+      "exequível",
+      "inexequível",
+      "orçamento estimado",
+      "valor compatível",
+      "valor estimado",
+      "pesquisa de preço"
+    ]
+  },
+  {
+    "id": 7,
+    "nome": "Modos de Disputa",
+    "artigo": "Art. 56",
+    "descricao": "Validação da sessão de lances (modo aberto) ou apresentação de propostas em sigilo (modo fechado), conforme estabelecido no edital.",
+    "peso": 10,
+    "keywords": [
+      "modo aberto",
+      "modo fechado",
+      "híbrido",
+      "lances",
+      "sigilo",
+      "disputa",
+      "sessão pública"
+    ]
+  },
+  {
+    "id": 8,
+    "nome": "Cadastro e Registro de Desempenho",
+    "artigo": "Art. 87 e 88",
+    "descricao": "Validação e consulta ao registro cadastral unificado, permitindo a análise do desempenho passado do licitante.",
+    "peso": 10,
+    "keywords": [
+      "cadastro",
+      "registro",
+      "desempenho",
+      "rating",
+      "licitante",
+      "registro cadastral",
+      "histórico"
+    ]
+  },
+  {
+    "id": 9,
+    "nome": "Critérios de Desempate",
+    "artigo": "Art. 60",
+    "descricao": "Validação automática da preferência de desempate, considerando ações de equidade entre homens e mulheres e programas de integridade.",
+    "peso": 10,
+    "keywords": [
+      "desempate",
+      "sustentabilidade",
+      "equidade",
+      "integridade",
+      "mulheres",
+      "programa de integridade",
+      "empate"
+    ]
+  },
+  {
+    "id": 10,
+    "nome": "Segregação de Funções e Segurança Digital",
+    "artigo": "Art. 17, § 2º",
+    "descricao": "Garantia de registro em ata, gravação em áudio e vídeo da sessão pública, e controle de acesso restrito (assinatura digital) para garantir a integridade do processo.",
+    "peso": 10,
+    "keywords": [
+      "ata",
+      "gravação",
+      "áudio",
+      "vídeo",
+      "assinatura digital",
+      "controle de acesso",
+      "segregação",
+      "segurança"
+    ]
+  }
+]

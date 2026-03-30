@@ -1,0 +1,6 @@
+venv/
+meu_banco_dados/
+__pycache__/
+*.pyc
+.env
+documentos/
