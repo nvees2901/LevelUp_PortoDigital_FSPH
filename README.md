@@ -1,3 +1,4 @@
+<img width="1063" height="234" alt="logo-fsph" src="https://github.com/user-attachments/assets/ff31e88d-ff03-4401-9e81-8ca9f0cf0058" />
 
 # FSPH - Sistema Inteligente de Análise de Termos de Referência
 
@@ -72,7 +73,7 @@ O sistema conta com logins separados por setor, obedecendo o seguinte pipeline d
 
 ---
 
-## 🚀 5. Início Rápido com Docker
+##  5. Início Rápido com Docker
 
 ### 1. Clone o repositório
 ```bash
@@ -99,7 +100,7 @@ docker compose up --build
 
 ---
 
-## 💻 6. Desenvolvimento Local
+##  6. Desenvolvimento Local
 
 ### Frontend (React/Vite)
 ```bash
