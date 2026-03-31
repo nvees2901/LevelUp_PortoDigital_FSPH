@@ -1,0 +1,29 @@
+# Dependencies
+node_modules/
+backend/.venv/
+
+# Build output
+frontend/dist/
+
+# Environment variables
+.env
+*.env
+
+# Python cache
+__pycache__/
+*.py[cod]
+*.pyo
+
+# ChromaDB local data
+backend/chroma_db/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Claude Code
+.claude/
