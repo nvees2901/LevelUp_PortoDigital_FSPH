@@ -1,42 +1,42 @@
 """
-rag_service.py — Serviço de RAG com ChromaDB + sentence-transformers
+rag_service.py — Serviço de RAG com ChromaDB Server (Docker)
 
 Pipeline:
-  1. Na inicialização: indexa todos os docs de /docs no ChromaDB
+  1. Na inicialização: conecta ao ChromaDB via HTTP e indexa docs de /docs
   2. Em cada query: busca semântica e retorna trechos relevantes
 
+O ChromaDB server gera embeddings internamente (all-MiniLM-L6-v2),
+eliminando a necessidade de PyTorch/sentence-transformers no backend.
+
 Coleções ChromaDB:
-  - "lei_14133"      → chunks da Lei 14.133/2021 (base legal)
-  - "termos_aprovados" → TRs pré-aprovados da FSPH (exemplos de referência)
+  - "lei_14133"        → chunks da Lei 14.133/2021 (base legal)
+  - "termos_aprovados"  → TRs pré-aprovados da FSPH (exemplos de referência)
 """
 
-import os
 import re
+import threading
 from pathlib import Path
-
-import chromadb
-from chromadb.config import Settings as ChromaSettings
-from sentence_transformers import SentenceTransformer
+from typing import TYPE_CHECKING
 
 from app.core.config import settings
-from app.services.document import DocumentService
 from app.utils.logging import get_logger
+
+if TYPE_CHECKING:
+    import chromadb
 
 logger = get_logger(__name__)
 
-# Modelo multilíngue compacto — suporte nativo PT-BR, ~120MB
-EMBEDDING_MODEL = "paraphrase-multilingual-MiniLM-L12-v2"
-
-CHUNK_SIZE = 1500      # ~375 tokens (seguro para o modelo MiniLM)
+CHUNK_SIZE = 1500      # ~375 tokens
 CHUNK_OVERLAP = 200    # overlap para não perder contexto nas bordas
 
 
 class RagService:
-    """Serviço singleton de RAG. Inicializado no startup do FastAPI."""
+    """Serviço singleton de RAG. Conecta ao ChromaDB server via HTTP."""
 
-    _client: chromadb.ClientAPI | None = None
-    _embedder: SentenceTransformer | None = None
+    _client: "chromadb.ClientAPI | None" = None
     _indexed: bool = False
+    _setup_done: bool = False
+    _indexing_lock = threading.Lock()  # evita indexação simultânea
 
     # ------------------------------------------------------------------ #
     # Setup
@@ -45,93 +45,118 @@ class RagService:
     @classmethod
     def setup(cls) -> None:
         """
-        Inicializa o ChromaDB e o modelo de embedding.
-        Chamado UMA VEZ no startup do servidor (lifespan).
+        Conecta ao ChromaDB server via HTTP.
+        Não carrega nenhum modelo localmente — embeddings são gerados no server.
         """
-        logger.info("Inicializando ChromaDB em: %s", settings.CHROMA_DB_PATH)
-        os.makedirs(settings.CHROMA_DB_PATH, exist_ok=True)
+        if cls._setup_done:
+            return
 
-        cls._client = chromadb.PersistentClient(
-            path=settings.CHROMA_DB_PATH,
-            settings=ChromaSettings(anonymized_telemetry=False),
+        import chromadb
+
+        logger.info(
+            "Conectando ao ChromaDB server em %s:%s",
+            settings.CHROMA_HOST,
+            settings.CHROMA_PORT,
         )
 
-        logger.info("Carregando modelo de embedding: %s", EMBEDDING_MODEL)
-        # O modelo é baixado automaticamente na 1ª execução (~120MB)
-        cls._embedder = SentenceTransformer(EMBEDDING_MODEL)
-        logger.info("✓ Modelo de embedding carregado")
+        cls._client = chromadb.HttpClient(
+            host=settings.CHROMA_HOST,
+            port=settings.CHROMA_PORT,
+        )
+
+        # Verifica conexão
+        cls._client.heartbeat()
+        cls._setup_done = True
+        logger.info("✓ Conectado ao ChromaDB server")
 
     @classmethod
     def index_documents(cls, docs_path: str | None = None) -> None:
         """
         Indexa todos os documentos da pasta /docs no ChromaDB.
         Se os documentos já estiverem indexados, não re-indexa.
+        Thread-safe via lock.
         """
-        if cls._client is None or cls._embedder is None:
-            cls.setup()
-
-        docs_dir = Path(docs_path or settings.DOCS_PATH)
-        if not docs_dir.exists():
-            logger.warning("Pasta /docs não encontrada: %s", docs_dir.resolve())
+        if cls._indexed:
             return
 
-        # Cria ou carrega coleções
-        lei_collection = cls._client.get_or_create_collection(
-            name="lei_14133",
-            metadata={"description": "Lei 14.133/2021 — Nova Lei de Licitações"},
-        )
-        tr_collection = cls._client.get_or_create_collection(
-            name="termos_aprovados",
-            metadata={"description": "TRs pré-aprovados da FSPH"},
-        )
+        with cls._indexing_lock:
+            # Double-check após adquirir o lock
+            if cls._indexed:
+                return
 
-        # Verifica se já foi indexado
-        if lei_collection.count() > 0 and tr_collection.count() > 0:
+            if cls._client is None:
+                cls.setup()
+
+            docs_dir = Path(docs_path or settings.DOCS_PATH)
+            if not docs_dir.exists():
+                logger.warning("Pasta /docs não encontrada: %s", docs_dir.resolve())
+                return
+
+            # Cria ou carrega coleções
+            lei_collection = cls._client.get_or_create_collection(
+                name="lei_14133",
+                metadata={"description": "Lei 14.133/2021 — Nova Lei de Licitações"},
+            )
+            tr_collection = cls._client.get_or_create_collection(
+                name="termos_aprovados",
+                metadata={"description": "TRs pré-aprovados da FSPH"},
+            )
+
+            # Verifica se já foi indexado
+            if lei_collection.count() > 0 and tr_collection.count() > 0:
+                logger.info(
+                    "✓ ChromaDB já indexado: %d chunks lei | %d chunks TRs",
+                    lei_collection.count(), tr_collection.count(),
+                )
+                cls._indexed = True
+                return
+
+            # Indexa os documentos
+            lei_indexed = 0
+            tr_indexed = 0
+
+            MAX_FILE_SIZE = 50 * 1024 * 1024  # 50MB
+
+            for file_path in docs_dir.iterdir():
+                if file_path.name == ".gitkeep":
+                    continue
+
+                filename = file_path.name
+                file_size = file_path.stat().st_size
+
+                if file_size > MAX_FILE_SIZE:
+                    logger.warning(
+                        "Pulando %s (%.1f MB) — excede limite de %d MB para indexação",
+                        filename, file_size / 1024 / 1024, MAX_FILE_SIZE // 1024 // 1024,
+                    )
+                    continue
+
+                logger.info("Indexando: %s", filename)
+
+                try:
+                    file_bytes = file_path.read_bytes()
+                    from app.services.document import DocumentService
+                    text = DocumentService.extract_text_sync(file_bytes, filename)
+
+                    if "14133" in filename or "Lei" in filename:
+                        chunks = cls._chunk_text(text, filename)
+                        cls._add_to_collection(lei_collection, chunks)
+                        lei_indexed += len(chunks)
+                        logger.info("  ✓ Lei indexada: %d chunks", len(chunks))
+                    else:
+                        chunks = cls._chunk_text(text, filename)
+                        cls._add_to_collection(tr_collection, chunks)
+                        tr_indexed += len(chunks)
+                        logger.info("  ✓ TR indexado: %d chunks", len(chunks))
+
+                except Exception as e:
+                    logger.error("Erro ao indexar %s: %s", filename, e)
+
             logger.info(
-                "✓ ChromaDB já indexado: %d chunks lei | %d chunks TRs",
-                lei_collection.count(), tr_collection.count(),
+                "✓ Indexação concluída: %d chunks da lei | %d chunks de TRs",
+                lei_indexed, tr_indexed,
             )
             cls._indexed = True
-            return
-
-        # Indexa os documentos
-        lei_indexed = 0
-        tr_indexed = 0
-
-        for file_path in docs_dir.iterdir():
-            if file_path.name == ".gitkeep":
-                continue
-
-            filename = file_path.name
-            logger.info("Indexando: %s", filename)
-
-            try:
-                file_bytes = file_path.read_bytes()
-                # Extrai texto usando o DocumentService existente
-                # Chamada síncrona direta — extract_text não usa await internamente
-                text = DocumentService.extract_text_sync(file_bytes, filename)
-
-                if "14133" in filename or "Lei" in filename:
-                    # É a lei → indexa na coleção lei_14133
-                    chunks = cls._chunk_text(text, filename)
-                    cls._add_to_collection(lei_collection, chunks)
-                    lei_indexed += len(chunks)
-                    logger.info("  ✓ Lei indexada: %d chunks", len(chunks))
-                else:
-                    # É um TR aprovado → indexa em termos_aprovados
-                    chunks = cls._chunk_text(text, filename)
-                    cls._add_to_collection(tr_collection, chunks)
-                    tr_indexed += len(chunks)
-                    logger.info("  ✓ TR indexado: %d chunks", len(chunks))
-
-            except Exception as e:
-                logger.error("Erro ao indexar %s: %s", filename, e)
-
-        logger.info(
-            "✓ Indexação concluída: %d chunks da lei | %d chunks de TRs",
-            lei_indexed, tr_indexed,
-        )
-        cls._indexed = True
 
     # ------------------------------------------------------------------ #
     # Busca semântica
@@ -139,26 +164,33 @@ class RagService:
 
     @classmethod
     def search_law(cls, query: str, top_k: int = 4) -> str:
-        """
-        Busca trechos relevantes da Lei 14.133/2021.
-        Retorna texto formatado pronto para injetar no prompt.
-        """
+        """Busca trechos relevantes da Lei 14.133/2021."""
         return cls._search("lei_14133", query, top_k, "Lei 14.133/2021")
 
     @classmethod
     def search_approved_terms(cls, query: str, top_k: int = 3) -> str:
-        """
-        Busca trechos de TRs pré-aprovados da FSPH como referência.
-        """
+        """Busca trechos de TRs pré-aprovados da FSPH como referência."""
         return cls._search("termos_aprovados", query, top_k, "TRs Aprovados FSPH")
 
     @classmethod
+    def ensure_indexed(cls) -> None:
+        """Garante que os documentos foram indexados (lazy — só na primeira busca)."""
+        if cls._indexed:
+            return
+        if cls._client is None:
+            cls.setup()
+        cls.index_documents()
+
+    @classmethod
     def get_full_context(cls, query: str) -> str:
-        """
-        Retorna contexto completo: trechos da lei + TRs de referência.
-        Usado no system prompt do chat IA.
-        """
-        if not cls._indexed:
+        """Retorna contexto completo: trechos da lei + TRs de referência."""
+        if not settings.RAG_ENABLED:
+            return ""
+
+        try:
+            cls.ensure_indexed()
+        except Exception as e:
+            logger.warning("RAG indisponível: %s", e)
             return ""
 
         law_context = cls.search_law(query, top_k=4)
@@ -184,20 +216,17 @@ class RagService:
         top_k: int,
         label: str,
     ) -> str:
-        """Executa busca semântica e formata os resultados."""
-        if cls._client is None or cls._embedder is None:
+        """Executa busca semântica — embeddings gerados pelo ChromaDB server."""
+        if cls._client is None:
             return ""
         try:
             collection = cls._client.get_collection(collection_name)
             if collection.count() == 0:
                 return ""
 
-            # Gera embedding da query
-            query_embedding = cls._embedder.encode(query).tolist()
-
-            # Busca por similaridade coseno
+            # query_texts faz o ChromaDB server gerar o embedding automaticamente
             results = collection.query(
-                query_embeddings=[query_embedding],
+                query_texts=[query],
                 n_results=min(top_k, collection.count()),
                 include=["documents", "metadatas"],
             )
@@ -205,7 +234,6 @@ class RagService:
             if not results["documents"] or not results["documents"][0]:
                 return ""
 
-            # Formata os resultados
             chunks = results["documents"][0]
             metadatas = results["metadatas"][0]
 
@@ -224,11 +252,7 @@ class RagService:
 
     @classmethod
     def _chunk_text(cls, text: str, source: str) -> list[dict]:
-        """
-        Divide o texto em chunks com overlap.
-        Retorna lista de {'text': ..., 'source': ..., 'chunk_index': ...}
-        """
-        # Remove espaços excessivos
+        """Divide o texto em chunks com overlap."""
         text = re.sub(r"\n{3,}", "\n\n", text)
         text = re.sub(r" {2,}", " ", text)
 
@@ -239,7 +263,6 @@ class RagService:
         while start < len(text):
             end = start + CHUNK_SIZE
 
-            # Tenta quebrar em fim de parágrafo
             if end < len(text):
                 break_pos = text.rfind("\n\n", start, end)
                 if break_pos == -1:
@@ -248,28 +271,28 @@ class RagService:
                     end = break_pos + 1
 
             chunk_text = text[start:end].strip()
-            if len(chunk_text) > 50:  # ignora chunks muito pequenos
+            if len(chunk_text) > 50:
                 chunks.append({
                     "text": chunk_text,
                     "source": source,
                     "chunk_index": chunk_idx,
                 })
             chunk_idx += 1
-            start = end - CHUNK_OVERLAP  # overlap
+            start = end - CHUNK_OVERLAP
 
         return chunks
 
     @classmethod
     def _add_to_collection(
         cls,
-        collection: chromadb.Collection,
+        collection: "chromadb.Collection",
         chunks: list[dict],
     ) -> None:
-        """Gera embeddings e adiciona chunks ao ChromaDB em lotes."""
+        """Adiciona chunks ao ChromaDB — server gera embeddings automaticamente."""
         if not chunks:
             return
 
-        BATCH_SIZE = 100  # ChromaDB recomenda lotes de até 100
+        BATCH_SIZE = 100
 
         for i in range(0, len(chunks), BATCH_SIZE):
             batch = chunks[i:i + BATCH_SIZE]
@@ -278,13 +301,10 @@ class RagService:
             metadatas = [{"source": c["source"], "chunk_index": c["chunk_index"]}
                          for c in batch]
 
-            # Gera embeddings em lote (muito mais rápido que um por um)
-            embeddings = cls._embedder.encode(texts, batch_size=32).tolist()
-
+            # Sem passar embeddings — ChromaDB server gera automaticamente
             collection.add(
                 ids=ids,
                 documents=texts,
-                embeddings=embeddings,
                 metadatas=metadatas,
             )
             logger.debug("Lote indexado: %d/%d chunks", i + len(batch), len(chunks))

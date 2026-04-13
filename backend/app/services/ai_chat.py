@@ -11,12 +11,17 @@ Compatibilidade: OpenRouter usa exatamente a mesma API do OpenAI —
 apenas mudamos base_url e adicionamos os headers exigidos.
 """
 
+import asyncio
+from collections.abc import AsyncGenerator
 from typing import Any
 
 from app.core.config import settings
 from app.utils.logging import get_logger
 
 logger = get_logger(__name__)
+
+# Timeout para chamadas à API (em segundos)
+_API_TIMEOUT = 60.0
 
 
 # ------------------------------------------------------------------ #
@@ -110,6 +115,27 @@ MOCK_RESPONSES: dict[str, list[str]] = {
 
 class AIChatService:
 
+    _client: Any = None  # AsyncOpenAI singleton
+    _client_key: str = ""  # Chave usada para criar o client (detecta mudanças)
+
+    @classmethod
+    def _get_client(cls) -> Any:
+        """Retorna o cliente AsyncOpenAI singleton (reutilizado entre requests)."""
+        current_key = f"{settings.active_api_key}|{settings.active_base_url}"
+        if cls._client is None or cls._client_key != current_key:
+            from openai import AsyncOpenAI
+
+            client_kwargs: dict[str, Any] = {
+                "api_key": settings.active_api_key,
+                "timeout": _API_TIMEOUT,
+            }
+            if settings.active_base_url:
+                client_kwargs["base_url"] = settings.active_base_url
+
+            cls._client = AsyncOpenAI(**client_kwargs)
+            cls._client_key = current_key
+        return cls._client
+
     @classmethod
     async def process_message(
         cls,
@@ -130,10 +156,113 @@ class AIChatService:
         if settings.is_mock_mode:
             return cls._mock_response(mode, history)
 
-        # Busca contexto RAG
-        rag_context = cls._get_rag_context(message, mode)
+        # Busca contexto RAG em thread separada (CPU-bound, não bloqueia event loop)
+        rag_context = await asyncio.to_thread(cls._get_rag_context, message, mode)
 
         return await cls._openrouter_response(message, mode, history, rag_context)
+
+    # ------------------------------------------------------------------ #
+    # Streaming
+    # ------------------------------------------------------------------ #
+
+    @classmethod
+    async def stream_message(
+        cls,
+        message: str,
+        mode: str,
+        history: list[dict[str, str]],
+    ) -> AsyncGenerator[str, None]:
+        """
+        Gera tokens de forma incremental via SSE.
+
+        Yields:
+            Chunks de texto conforme chegam da API.
+            O último yield é um JSON com metadados: {"done": true, "term_complete": bool}
+        """
+        import json
+
+        if settings.is_mock_mode:
+            result = cls._mock_response(mode, history)
+            # Simula streaming do mock em pedaços
+            content = result["content"]
+            for i in range(0, len(content), 8):
+                yield content[i : i + 8]
+            yield json.dumps({"done": True, "term_complete": False, "is_mock": True})
+            return
+
+        rag_context = await asyncio.to_thread(cls._get_rag_context, message, mode)
+        async for chunk in cls._openrouter_stream(message, mode, history, rag_context):
+            yield chunk
+
+    @classmethod
+    async def _openrouter_stream(
+        cls,
+        message: str,
+        mode: str,
+        history: list[dict[str, str]],
+        rag_context: str,
+    ) -> AsyncGenerator[str, None]:
+        """Streaming via OpenRouter com SSE."""
+        import json
+
+        system_content = SYSTEM_PROMPTS[mode].format(
+            rag_context=rag_context if rag_context else "(sem contexto adicional disponível)"
+        )
+
+        messages = [
+            {"role": "system", "content": system_content},
+            *history,
+            {"role": "user", "content": message},
+        ]
+
+        client = cls._get_client()
+
+        extra_headers = {}
+        if settings.OPENROUTER_API_KEY:
+            extra_headers = {
+                "HTTP-Referer": "https://fsph.pe.gov.br",
+                "X-Title": "FSPH - Sistema de Analise de TRs",
+            }
+
+        logger.info(
+            "OpenRouter stream request: model=%s mode=%s msgs=%d",
+            settings.active_model, mode, len(messages),
+        )
+
+        full_content = ""
+        try:
+            stream = await client.chat.completions.create(
+                model=settings.active_model,
+                messages=messages,
+                max_tokens=2500,
+                temperature=0.4,
+                extra_headers=extra_headers,
+                stream=True,
+            )
+
+            async for chunk in stream:
+                delta = chunk.choices[0].delta if chunk.choices else None
+                if delta and delta.content:
+                    full_content += delta.content
+                    yield delta.content
+
+            # Detecta se TR foi gerado
+            term_complete = (
+                mode == "gerar"
+                and any(kw in full_content for kw in [
+                    "TERMO DE REFERÊNCIA", "Art. 6", "justificativa:",
+                    "Objeto:", "1. OBJETO", "1. Objeto",
+                ])
+            )
+
+            yield json.dumps({"done": True, "term_complete": term_complete, "is_mock": False})
+
+        except Exception as e:
+            logger.error("Erro OpenRouter stream: %s", str(e), exc_info=True)
+            # Fallback: retorna mock completo
+            result = cls._mock_response(mode, history)
+            yield result["content"]
+            yield json.dumps({"done": True, "term_complete": False, "is_mock": True})
 
     # ------------------------------------------------------------------ #
     # Modo Mock
@@ -161,9 +290,6 @@ class AIChatService:
         rag_context: str,
     ) -> dict[str, Any]:
         """Chama o Llama 3.3 70B via OpenRouter com contexto RAG."""
-        from openai import AsyncOpenAI
-
-        # Monta system prompt com contexto RAG injetado
         system_content = SYSTEM_PROMPTS[mode].format(
             rag_context=rag_context if rag_context else "(sem contexto adicional disponível)"
         )
@@ -174,21 +300,13 @@ class AIChatService:
             {"role": "user", "content": message},
         ]
 
-        # Configura cliente — usa base_url do OpenRouter se disponível
-        client_kwargs: dict[str, Any] = {
-            "api_key": settings.active_api_key,
-        }
-        if settings.active_base_url:
-            client_kwargs["base_url"] = settings.active_base_url
+        client = cls._get_client()
 
-        client = AsyncOpenAI(**client_kwargs)
-
-        # Headers obrigatórios do OpenRouter
         extra_headers = {}
         if settings.OPENROUTER_API_KEY:
             extra_headers = {
                 "HTTP-Referer": "https://fsph.pe.gov.br",
-                "X-Title": "FSPH - Sistema de Análise de TRs",
+                "X-Title": "FSPH - Sistema de Analise de TRs",
             }
 
         logger.info(

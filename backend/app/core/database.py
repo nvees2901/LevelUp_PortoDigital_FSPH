@@ -30,9 +30,11 @@ from app.core.config import settings
 engine = create_async_engine(
     settings.DATABASE_URL,
     pool_pre_ping=True,
-    echo=settings.DEBUG,  # loga queries apenas em modo debug
-    pool_size=10,         # máximo de conexões simultâneas no pool
-    max_overflow=20,      # conexões extras além do pool_size em pico
+    echo=False,           # echo=True é muito pesado — use logging do app para debug
+    pool_size=5,          # suficiente para desenvolvimento local
+    max_overflow=5,       # conexões extras além do pool_size em pico
+    pool_recycle=600,     # recicla conexões ociosas a cada 10min (evita conexões zumbi)
+    pool_timeout=10,      # timeout rápido para não travar se pool estiver cheio
 )
 
 # ------------------------------------------------------------------ #

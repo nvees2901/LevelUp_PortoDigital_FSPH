@@ -1,32 +1,29 @@
-# Python
+# Dependencies
+node_modules/
+backend/.venv/
+
+# Build output
+frontend/dist/
+
+# Environment variables
+.env
+*.env
+
+# Python cache
 __pycache__/
 *.py[cod]
 *.pyo
-.venv/
-.env
-*.egg-info/
-dist/
-build/
 
-# Node
-node_modules/
-.next/
-out/
-.env.local
-
-# Docker
-*.log
-
-# OS
-.DS_Store
-Thumbs.db
+# ChromaDB local data
+backend/chroma_db/
 
 # IDE
 .vscode/
 .idea/
 
-# Local tooling
-.claude/
+# OS
+.DS_Store
+Thumbs.db
 
-# Local vector database
-backend/chroma_db/
+# Claude Code
+.claude/
