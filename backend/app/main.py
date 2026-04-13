@@ -53,11 +53,11 @@ async def lifespan(app: FastAPI):
     """
     # ---- STARTUP ----
     logger.info(
-        "Iniciando %s v%s | Ambiente: %s | Modo mock: %s",
+        "Iniciando %s v%s | Ambiente: %s | IA configurada: %s",
         settings.APP_NAME,
         settings.APP_VERSION,
         settings.ENVIRONMENT,
-        settings.is_mock_mode,
+        not settings.is_mock_mode,
     )
 
     # Verifica a conexão com o banco ao iniciar
@@ -190,7 +190,7 @@ async def health_check():
         "app": settings.APP_NAME,
         "version": settings.APP_VERSION,
         "environment": settings.ENVIRONMENT,
-        "mock_mode": settings.is_mock_mode,
+        "ai_configured": not settings.is_mock_mode,
     }
 
 
