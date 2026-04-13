@@ -1,179 +1,109 @@
-import { useState, useEffect, useCallback } from 'react';
-import { MessageSquare, Search, Filter, Loader2, XCircle } from 'lucide-react';
+import { useState } from 'react';
+import { Search, Bot } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
-import { getTerms } from '../../services/api';
-import type { TermSummary, TelaId } from '../../types';
+import { DADOS_INICIAIS, ETAPAS, statusColor, modalColor, COLORS } from '../../constants';
+import type { TermoMock, TelaId } from '../../types';
 
 interface TermListProps {
-  navegar: (tela: TelaId, termo?: TermSummary) => void;
-}
-
-function getStatusColor(status: string): string {
-  if (status === 'rascunho') return 'bg-slate-100 text-slate-700 border-slate-200';
-  if (status === 'validado') return 'bg-emerald-50 text-emerald-700 border-emerald-200';
-  if (status === 'reprovado') return 'bg-red-50 text-red-700 border-red-200';
-  return 'bg-amber-50 text-amber-700 border-amber-200';
-}
-
-function formatStatus(status: string): string {
-  const map: Record<string, string> = {
-    rascunho: 'Rascunho',
-    em_analise: 'Em Análise',
-    validado: 'Validado',
-    reprovado: 'Reprovado',
-  };
-  return map[status] || status;
+  navegar: (tela: TelaId, termo?: TermoMock) => void;
 }
 
 export default function TermList({ navegar }: TermListProps) {
   const { usuario } = useAuth();
+  const [termos] = useState<TermoMock[]>(DADOS_INICIAIS);
   const [busca, setBusca] = useState('');
-  const [terms, setTerms] = useState<TermSummary[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [page, setPage] = useState(1);
-  const [totalPages, setTotalPages] = useState(0);
+  const [filtroMod, setFiltroMod] = useState('Todas');
+  const [filtroStatus, setFiltroStatus] = useState('Todos');
 
-  const fetchTerms = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const data = await getTerms({
-        page,
-        limit: 10,
-        search: busca.trim() || undefined,
-      });
-      setTerms(data.items);
-      setTotalPages(data.pages);
-    } catch {
-      setError('Não foi possível carregar os termos. Verifique se o backend está rodando.');
-    } finally {
-      setLoading(false);
-    }
-  }, [page, busca]);
+  const statusOpts = ['Todos', ...ETAPAS];
 
-  useEffect(() => {
-    const timeout = setTimeout(fetchTerms, busca ? 300 : 0);
-    return () => clearTimeout(timeout);
-  }, [fetchTerms, busca]);
+  const lista = termos.filter(t => {
+    const q = busca.toLowerCase();
+    const mb = t.objeto.toLowerCase().includes(q) || t.id.toLowerCase().includes(q) || t.unidade.toLowerCase().includes(q);
+    const mm = filtroMod === 'Todas' || t.modalidade === filtroMod;
+    const ms = filtroStatus === 'Todos' || t.status === filtroStatus;
+    return mb && mm && ms;
+  });
 
   return (
-    <div className="bg-white rounded-xl border border-slate-200 shadow-sm flex flex-col h-full">
-      <div className="p-5 border-b border-slate-200 flex flex-wrap gap-4 justify-between items-center rounded-t-xl">
-        <h2 className="text-xl font-bold text-[#0a2f64]">Base de Termos de Referência</h2>
-        <div className="flex gap-2">
-          {usuario?.id === 'demandante' && (
-            <button
-              onClick={() => navegar('chat')}
-              className="flex items-center gap-2 px-4 py-2 bg-[#0a2f64] text-white rounded-lg hover:bg-[#134084] shadow-sm font-medium"
-            >
-              <MessageSquare size={18} /> Novo Termo (IA)
-            </button>
-          )}
-        </div>
-      </div>
-
-      {error && (
-        <div className="mx-4 mt-3 bg-red-50 border border-red-200 text-red-700 px-3 py-2 rounded-lg text-sm flex items-center gap-2">
-          <XCircle size={14} />
-          {error}
-        </div>
-      )}
-
-      <div className="p-4 border-b border-slate-100 bg-slate-50 flex flex-wrap gap-4">
-        <div className="flex flex-1 max-w-md relative">
-          <Search className="absolute left-3 top-2.5 text-slate-400" size={18} />
-          <input
-            type="text"
-            placeholder="Buscar por objeto ou número..."
-            value={busca}
-            onChange={(e) => { setBusca(e.target.value); setPage(1); }}
-            className="w-full pl-10 pr-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#0a2f64]"
-          />
-        </div>
-        <button className="flex items-center gap-2 px-4 py-2 border border-slate-300 bg-white rounded-lg text-slate-700 hover:bg-slate-100">
-          <Filter size={18} /> Filtros
-        </button>
-      </div>
-
-      <div className="overflow-x-auto">
-        {loading ? (
-          <div className="p-12 text-center">
-            <Loader2 size={32} className="animate-spin text-[#0a2f64] mx-auto mb-3" />
-            <p className="text-slate-500">Carregando termos...</p>
-          </div>
-        ) : (
-          <table className="w-full text-left border-collapse">
-            <thead>
-              <tr className="bg-white border-b border-slate-200 text-sm text-slate-500">
-                <th className="p-4 font-semibold uppercase tracking-wider text-xs">Identificador / Objeto</th>
-                <th className="p-4 font-semibold uppercase tracking-wider text-xs">Categoria</th>
-                <th className="p-4 font-semibold uppercase tracking-wider text-xs">Status</th>
-                <th className="p-4 font-semibold uppercase tracking-wider text-xs">Valor Estimado</th>
-                <th className="p-4 font-semibold uppercase tracking-wider text-xs text-right">Ação</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {terms.length > 0 ? terms.map((t) => (
-                <tr key={t.id} className="hover:bg-slate-50 transition-colors">
-                  <td className="p-4">
-                    <div className="font-bold text-[#0a2f64] mb-1 text-xs">{t.id.slice(0, 8)}...</div>
-                    <div className="text-sm text-slate-700 font-medium line-clamp-1">{t.title}</div>
-                    {t.original_filename && (
-                      <div className="text-xs text-slate-400 mt-1">{t.original_filename}</div>
-                    )}
-                  </td>
-                  <td className="p-4 text-sm text-slate-600 capitalize">{t.category.replace('_', ' ')}</td>
-                  <td className="p-4">
-                    <span className={`inline-flex items-center px-2.5 py-1 rounded border text-xs font-semibold ${getStatusColor(t.status)}`}>
-                      {formatStatus(t.status)}
-                    </span>
-                  </td>
-                  <td className="p-4 text-sm font-medium text-slate-700">
-                    {t.estimated_value ? `R$ ${Number(t.estimated_value).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}` : '-'}
-                  </td>
-                  <td className="p-4 text-right">
-                    <button
-                      onClick={() => navegar('detalhe', t)}
-                      className="text-[#0a2f64] hover:text-[#134084] font-semibold text-sm px-3 py-1.5 hover:bg-blue-50 rounded transition-colors"
-                    >
-                      Ver Detalhes
-                    </button>
-                  </td>
-                </tr>
-              )) : (
-                <tr>
-                  <td colSpan={5} className="p-12 text-center text-slate-500">
-                    Nenhum termo encontrado.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
+    <div className="bg-white rounded-xl border border-slate-200 shadow-sm flex flex-col">
+      <div className="p-4 border-b border-slate-200 flex flex-wrap gap-3 justify-between items-center">
+        <h2 className="text-base font-bold text-[#0a2f64]">Processos de Contratacao</h2>
+        {usuario?.id === 'demandante' && (
+          <button onClick={() => navegar('chat')}
+            className="flex items-center gap-2 px-4 py-2 text-sm font-bold text-white rounded-lg shadow-sm hover:bg-[#134084] transition"
+            style={{ backgroundColor: COLORS.primary }}>
+            <Bot size={15} /> Novo Processo via IA
+          </button>
         )}
       </div>
 
-      {totalPages > 1 && (
-        <div className="p-4 border-t border-slate-200 flex justify-center gap-2">
-          <button
-            disabled={page <= 1}
-            onClick={() => setPage((p) => p - 1)}
-            className="px-3 py-1 border rounded text-sm disabled:opacity-40"
-          >
-            Anterior
-          </button>
-          <span className="px-3 py-1 text-sm text-slate-600">
-            Página {page} de {totalPages}
-          </span>
-          <button
-            disabled={page >= totalPages}
-            onClick={() => setPage((p) => p + 1)}
-            className="px-3 py-1 border rounded text-sm disabled:opacity-40"
-          >
-            Próxima
-          </button>
+      {/* Filtros */}
+      <div className="p-3 border-b border-slate-100 bg-slate-50 flex flex-wrap gap-2">
+        <div className="relative flex-1 min-w-48">
+          <Search className="absolute left-3 top-2.5 text-slate-400" size={15} />
+          <input value={busca} onChange={e => setBusca(e.target.value)} placeholder="Buscar por objeto, numero ou unidade..."
+            className="w-full pl-8 pr-4 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#0a2f64]" />
         </div>
-      )}
+        <select value={filtroMod} onChange={e => setFiltroMod(e.target.value)}
+          className="px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[#0a2f64]">
+          {['Todas', 'Licitacao', 'Dispensa', 'Inexigibilidade'].map(m => <option key={m}>{m}</option>)}
+        </select>
+        <select value={filtroStatus} onChange={e => setFiltroStatus(e.target.value)}
+          className="px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[#0a2f64]">
+          {statusOpts.map(s => <option key={s}>{s}</option>)}
+        </select>
+      </div>
+
+      {/* Tabela */}
+      <div className="overflow-x-auto">
+        <table className="w-full text-left">
+          <thead>
+            <tr className="border-b border-slate-200 text-xs text-slate-500 uppercase tracking-wider">
+              {['Processo / Objeto', 'Unidade', 'Modalidade', 'Status', 'Score IA', 'Acao'].map((h, i) => (
+                <th key={h} className={`p-4 font-semibold ${i === 5 ? 'text-right' : ''}`}>{h}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-100">
+            {lista.map(t => (
+              <tr key={t.id} className="hover:bg-slate-50 transition-colors">
+                <td className="p-4">
+                  <p className="font-bold text-[#0a2f64] text-sm">{t.id}</p>
+                  <p className="text-sm text-slate-700 mt-0.5">{t.objeto}</p>
+                  <p className="text-xs text-slate-400 mt-0.5">{t.valor}</p>
+                </td>
+                <td className="p-4 text-xs text-slate-600 max-w-32">{t.unidade.split('–')[0].trim()}</td>
+                <td className="p-4">
+                  <span className={`text-xs font-bold px-2 py-0.5 rounded ${modalColor(t.modalidade)}`}>{t.modalidade}</span>
+                </td>
+                <td className="p-4">
+                  <span className={`inline-flex px-2 py-0.5 rounded border text-xs font-semibold ${statusColor(t.status)}`}>{t.status}</span>
+                </td>
+                <td className="p-4">
+                  {t.scoreIA != null ? (
+                    <div className="flex items-center gap-1.5">
+                      <span className={`text-sm font-bold ${t.scoreIA >= 90 ? 'text-emerald-600' : 'text-amber-500'}`}>{t.scoreIA}%</span>
+                      <div className="w-12 h-1.5 bg-slate-200 rounded-full overflow-hidden">
+                        <div className={`h-full rounded-full ${t.scoreIA >= 90 ? 'bg-emerald-500' : 'bg-amber-400'}`} style={{ width: `${t.scoreIA}%` }} />
+                      </div>
+                    </div>
+                  ) : <span className="text-slate-300 text-xs">N/A</span>}
+                </td>
+                <td className="p-4 text-right">
+                  <button onClick={() => navegar('detalhe', t)}
+                    className="text-[#0a2f64] hover:bg-blue-50 font-bold text-xs px-3 py-1.5 rounded transition-colors border border-transparent hover:border-blue-200">
+                    Ver Detalhes
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        {lista.length === 0 && (
+          <div className="p-10 text-center text-slate-400 text-sm">Nenhum processo encontrado para os filtros aplicados.</div>
+        )}
+      </div>
     </div>
   );
 }

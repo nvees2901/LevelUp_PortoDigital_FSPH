@@ -1,5 +1,5 @@
 """
-ai_chat.py — Integração com provedores de IA (Gemini, OpenRouter, Ollama) + RAG
+ai_chat.py — Integração com provedores de IA (Gemini, Ollama, OpenRouter, OpenAI) + RAG
 
 Fluxo:
   1. RAG: busca trechos relevantes da Lei 14133 e TRs aprovados
@@ -163,7 +163,7 @@ class AIChatService:
         if settings.is_gemini_mode:
             return await cls._gemini_response(message, mode, history, rag_context)
 
-        return await cls._openrouter_response(message, mode, history, rag_context)
+        return await cls._openai_compat_response(message, mode, history, rag_context)
 
     # ------------------------------------------------------------------ #
     # Streaming
@@ -192,18 +192,18 @@ class AIChatService:
                 yield chunk
             return
 
-        async for chunk in cls._openrouter_stream(message, mode, history, rag_context):
+        async for chunk in cls._openai_compat_stream(message, mode, history, rag_context):
             yield chunk
 
     @classmethod
-    async def _openrouter_stream(
+    async def _openai_compat_stream(
         cls,
         message: str,
         mode: str,
         history: list[dict[str, str]],
         rag_context: str,
     ) -> AsyncGenerator[str, None]:
-        """Streaming via OpenRouter com SSE."""
+        """Streaming via provedor OpenAI-compatible (Ollama/OpenRouter/OpenAI)."""
         import json
 
         system_content = SYSTEM_PROMPTS[mode].format(
@@ -226,7 +226,8 @@ class AIChatService:
             }
 
         logger.info(
-            "OpenRouter stream request: model=%s mode=%s msgs=%d",
+            "%s stream request: model=%s mode=%s msgs=%d",
+            settings.active_provider_name,
             settings.active_model, mode, len(messages),
         )
 
@@ -247,7 +248,7 @@ class AIChatService:
                     full_content += delta.content
                     yield delta.content
         except Exception as e:
-            logger.error("Erro OpenRouter stream: %s", str(e), exc_info=True)
+            logger.error("Erro %s stream: %s", settings.active_provider_name, str(e), exc_info=True)
             raise AIProviderError(f"Erro ao chamar provedor de IA: {e}") from e
 
         # Detecta se TR foi gerado
@@ -381,18 +382,18 @@ class AIChatService:
         yield json.dumps({"done": True, "term_complete": term_complete})
 
     # ------------------------------------------------------------------ #
-    # OpenRouter
+    # OpenAI-compatible (Ollama / OpenRouter / OpenAI)
     # ------------------------------------------------------------------ #
 
     @classmethod
-    async def _openrouter_response(
+    async def _openai_compat_response(
         cls,
         message: str,
         mode: str,
         history: list[dict[str, str]],
         rag_context: str,
     ) -> dict[str, Any]:
-        """Chama o Llama 3.3 70B via OpenRouter com contexto RAG."""
+        """Chama o modelo ativo via provedor OpenAI-compatible (Ollama/OpenRouter/OpenAI)."""
         system_content = SYSTEM_PROMPTS[mode].format(
             rag_context=rag_context if rag_context else "(sem contexto adicional disponível)"
         )
@@ -413,7 +414,8 @@ class AIChatService:
             }
 
         logger.info(
-            "OpenRouter request: model=%s mode=%s rag_chunks=%d msgs=%d",
+            "%s request: model=%s mode=%s rag_chunks=%d msgs=%d",
+            settings.active_provider_name,
             settings.active_model, mode,
             len(rag_context.split("\n")) if rag_context else 0,
             len(messages),
@@ -428,7 +430,7 @@ class AIChatService:
                 extra_headers=extra_headers,
             )
         except Exception as e:
-            logger.error("Erro OpenRouter: %s", str(e), exc_info=True)
+            logger.error("Erro %s: %s", settings.active_provider_name, str(e), exc_info=True)
             raise AIProviderError(f"Erro ao chamar provedor de IA: {e}") from e
 
         content = response.choices[0].message.content or ""
@@ -443,7 +445,8 @@ class AIChatService:
         )
 
         logger.info(
-            "OpenRouter response: tokens=%s term_complete=%s",
+            "%s response: tokens=%s term_complete=%s",
+            settings.active_provider_name,
             getattr(response.usage, "total_tokens", "?"),
             term_complete,
         )

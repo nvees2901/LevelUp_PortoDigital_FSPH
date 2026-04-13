@@ -5,7 +5,7 @@ import { SETORES } from '../constants';
 
 interface AuthContextType {
   usuario: UsuarioAtual | null;
-  login: (setor: Setor, nomeUsuario: string) => void;
+  login: (setor: Setor, nomeUsuario: string, subunidade?: string) => void;
   logout: () => void;
 }
 
@@ -19,7 +19,7 @@ function loadAuth(): UsuarioAtual | null {
     // Reconstruct icon from SETORES (icons can't be serialized)
     const setor = SETORES.find((s) => s.id === parsed.id);
     if (!setor) return null;
-    return { ...parsed, icon: setor.icon };
+    return { ...parsed, icon: setor.icon, descricao: setor.descricao };
   } catch {
     return null;
   }
@@ -30,10 +30,11 @@ const AuthContext = createContext<AuthContextType | null>(null);
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [usuario, setUsuario] = useState<UsuarioAtual | null>(loadAuth);
 
-  const login = useCallback((setor: Setor, nomeUsuario: string) => {
+  const login = useCallback((setor: Setor, nomeUsuario: string, subunidade?: string) => {
     const user: UsuarioAtual = {
       ...setor,
       nomeUsuarioLogado: nomeUsuario || 'Usuário Padrão',
+      subunidade,
     };
     localStorage.setItem(AUTH_KEY, JSON.stringify(user));
     setUsuario(user);

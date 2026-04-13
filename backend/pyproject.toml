@@ -32,6 +32,7 @@ dependencies = [
     # --- RAG / Banco Vetorial ---
     "chromadb>=0.6.0",                     # cliente HTTP para ChromaDB server (Docker)
     "olefile>=0.47",
+    "pypdf>=6.10.0",
 ]
 
 [project.scripts]

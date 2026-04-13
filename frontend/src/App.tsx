@@ -9,7 +9,7 @@ import TermList from './components/Terms/TermList';
 import TermDetail from './components/Terms/TermDetail';
 import ChatView from './components/Chat/ChatView';
 import UploadView from './components/Upload/UploadView';
-import type { TermSummary, TelaId } from './types';
+import type { TermoMock, TelaId } from './types';
 
 class ErrorBoundary extends Component<{ children: ReactNode }, { error: Error | null }> {
   state = { error: null as Error | null };
@@ -23,16 +23,13 @@ class ErrorBoundary extends Component<{ children: ReactNode }, { error: Error | 
       return (
         <div className="min-h-screen flex items-center justify-center bg-slate-100 p-8">
           <div className="bg-white rounded-xl shadow-lg p-8 max-w-lg w-full">
-            <h1 className="text-2xl font-bold text-red-600 mb-4">Erro na aplicação</h1>
+            <h1 className="text-2xl font-bold text-red-600 mb-4">Erro na aplicacao</h1>
             <p className="text-slate-600 mb-4">{this.state.error.message}</p>
             <pre className="bg-slate-100 p-4 rounded text-xs overflow-auto max-h-40 mb-4">
               {this.state.error.stack}
             </pre>
             <button
-              onClick={() => {
-                localStorage.clear();
-                window.location.reload();
-              }}
+              onClick={() => { localStorage.clear(); window.location.reload(); }}
               className="px-4 py-2 bg-[#0a2f64] text-white rounded-lg hover:bg-[#134084]"
             >
               Limpar dados e recarregar
@@ -48,9 +45,9 @@ class ErrorBoundary extends Component<{ children: ReactNode }, { error: Error | 
 function AppContent() {
   const { usuario } = useAuth();
   const [telaAtual, setTelaAtual] = useState<TelaId>('dashboard');
-  const [termoSelecionado, setTermoSelecionado] = useState<TermSummary | null>(null);
+  const [termoSelecionado, setTermoSelecionado] = useState<TermoMock | null>(null);
 
-  const navegar = useCallback((tela: TelaId, termo?: TermSummary) => {
+  const navegar = useCallback((tela: TelaId, termo?: TermoMock) => {
     setTelaAtual(tela);
     if (termo) setTermoSelecionado(termo);
   }, []);
@@ -69,22 +66,23 @@ function AppContent() {
         return <TermDetail termo={termoSelecionado} navegar={navegar} />;
       case 'chat':
         return <ChatView navegar={navegar} />;
+      case 'anexar':
       case 'analise':
         return <UploadView navegar={navegar} />;
+      case 'base':
+        return <TermList navegar={navegar} />;
       default:
         return <DashboardView navegar={navegar} />;
     }
   };
 
   return (
-    <div className="flex flex-col h-screen bg-slate-50 font-sans text-slate-800 overflow-hidden">
+    <div className="flex flex-col h-screen bg-slate-100 overflow-hidden" style={{ fontFamily: "'Segoe UI', system-ui, sans-serif" }}>
       <Header />
       <div className="flex flex-1 overflow-hidden">
         <Sidebar telaAtual={telaAtual} navegar={navegar} />
-        <main className="flex-1 flex flex-col h-full overflow-hidden bg-slate-100/50">
-          <div className="flex-1 overflow-auto p-6 relative">
-            {renderConteudoPrincipal()}
-          </div>
+        <main className="flex-1 overflow-auto p-5 bg-slate-100/60">
+          {renderConteudoPrincipal()}
         </main>
       </div>
     </div>

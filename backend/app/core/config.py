@@ -54,7 +54,7 @@ class Settings(BaseSettings):
     RAG_ENABLED: bool = False   # True para usar RAG (requer ChromaDB rodando)
     CHROMA_HOST: str = "localhost"  # host do ChromaDB server (Docker: "chromadb")
     CHROMA_PORT: int = 8100        # porta do ChromaDB server (Docker interna: 8000)
-    DOCS_PATH: str = str(_PROJECT_ROOT / "docs")  # pasta com Lei 14133 e TRs aprovados
+    DOCS_PATH: str = str(_PROJECT_ROOT / "documents")  # pasta com Lei 14133 e TRs aprovados
 
     # ------------------------------------------------------------------ #
     # Segurança
@@ -140,6 +140,19 @@ class Settings(BaseSettings):
     def is_gemini_mode(self) -> bool:
         """True se Gemini é o provider ativo."""
         return bool(self.GEMINI_API_KEY.strip())
+
+    @property
+    def active_provider_name(self) -> str:
+        """Nome legível do provedor ativo para logs."""
+        if self.GEMINI_API_KEY.strip():
+            return "Gemini"
+        if self.OLLAMA_BASE_URL.strip():
+            return "Ollama"
+        if self.OPENROUTER_API_KEY.strip():
+            return "OpenRouter"
+        if self.OPENAI_API_KEY.strip():
+            return "OpenAI"
+        return "none"
 
     # ------------------------------------------------------------------ #
     # Leitura do arquivo .env
