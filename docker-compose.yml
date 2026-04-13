@@ -14,24 +14,39 @@ services:
       - "8000:8000"
     environment:
       - DATABASE_URL=postgresql+asyncpg://postgres:postgres@postgres:5432/fsph
-      - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-}
-      - OLLAMA_MODEL=${OLLAMA_MODEL:-llama3.2}
+      - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-http://ollama:11434/v1}
+      - OLLAMA_MODEL=${OLLAMA_MODEL:-qwen2.5:7b}
       - OPENROUTER_API_KEY=${OPENROUTER_API_KEY:-}
       - OPENAI_API_KEY=${OPENAI_API_KEY:-}
-      - DOCS_PATH=/app/docs
+      - DOCS_PATH=/app/documents
       - RAG_ENABLED=true
       - CHROMA_HOST=chromadb
       - CHROMA_PORT=8000
     volumes:
-      - ./docs:/app/docs:ro
+      - ./documents:/app/documents:ro
     depends_on:
       postgres:
         condition: service_healthy
       chromadb:
         condition: service_started
+      ollama:
+        condition: service_started
+
+  ollama:
+    image: ollama/ollama:latest
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    healthcheck:
+      test: ["CMD-SHELL", "ollama list || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
 
   chromadb:
-    image: chromadb/chroma:0.6.3
+    image: chromadb/chroma:1.0.12
     ports:
       - "8100:8000"
     volumes:
@@ -75,3 +90,4 @@ services:
 volumes:
   postgres_data:
   chroma_data:
+  ollama_data:

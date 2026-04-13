@@ -98,10 +98,6 @@ class ChatResponse(BaseModel):
         default=None,
         description="UUID do TR gerado (apenas quando modo='gerar' e TR finalizado)",
     )
-    is_mock: bool = Field(
-        default=False,
-        description="True se a resposta veio do modo mock (sem OpenAI API)",
-    )
 
 
 class ChatSessionResponse(BaseModel):

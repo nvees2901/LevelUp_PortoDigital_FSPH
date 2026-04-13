@@ -46,6 +46,17 @@ class DocumentService:
     }
 
     @classmethod
+    def _detect_real_format(cls, file_bytes: bytes, extension: str) -> str:
+        """
+        Detecta o formato real do arquivo pelos magic bytes.
+        Alguns .docx são na verdade .doc (OLE) renomeados.
+        """
+        if file_bytes[:4] == _OLE_MAGIC and extension == ".docx":
+            logger.info("Arquivo .docx é na verdade OLE (.doc) — usando extrator de .doc")
+            return ".doc"
+        return extension
+
+    @classmethod
     def extract_text_sync(cls, file_bytes: bytes, filename: str) -> str:
         """
         Versão síncrona de extract_text — para uso em threads (ex: RagService).
@@ -53,6 +64,7 @@ class DocumentService:
         todos síncronos, portanto não há necessidade de event loop.
         """
         extension = cls._get_extension(filename)
+        extension = cls._detect_real_format(file_bytes, extension)
 
         logger.info("Extraindo texto: filename=%r ext=%s size=%d bytes",
                     filename, extension, len(file_bytes))
@@ -83,6 +95,7 @@ class DocumentService:
             DocumentProcessingError: se a extração falhar (arquivo corrompido)
         """
         extension = cls._get_extension(filename)
+        extension = cls._detect_real_format(file_bytes, extension)
 
         logger.info("Extraindo texto: filename=%r ext=%s size=%d bytes",
                     filename, extension, len(file_bytes))
@@ -262,17 +275,22 @@ class DocumentService:
     @staticmethod
     def _extract_doc(file_bytes: bytes, filename: str) -> str:
         """
-        Extrai texto de arquivos .doc (Word legado) via antiword.
+        Extrai texto de arquivos .doc (Word legado).
 
-        antiword é um utilitário de linha de comando que converte .doc para
-        texto puro. Requer instalação no sistema:
-          Ubuntu/Debian: apt-get install antiword
-          Windows: não disponível nativamente (alternativa: LibreOffice headless)
-
-        Para MVP em ambiente Linux (Docker), antiword é simples e eficaz.
+        Estratégia em camadas:
+          1. olefile — parse nativo do OLE, extrai texto do stream WordDocument
+          2. antiword — CLI (requer instalação, disponível no Docker Linux)
         """
+        # Tenta olefile primeiro (funciona em qualquer OS, sem dependência externa)
         try:
-            # Salva bytes em arquivo temporário (antiword precisa de arquivo real)
+            text = DocumentService._extract_doc_olefile(file_bytes, filename)
+            if text and text.strip():
+                return text
+        except Exception as e:
+            logger.debug("olefile falhou para %r: %s", filename, e)
+
+        # Fallback: antiword (Linux/Docker)
+        try:
             with tempfile.NamedTemporaryFile(suffix=".doc", delete=False) as tmp:
                 tmp.write(file_bytes)
                 tmp_path = tmp.name
@@ -281,36 +299,107 @@ class DocumentService:
                 ["antiword", tmp_path],
                 capture_output=True,
                 text=True,
-                timeout=30,  # timeout de 30s para arquivos grandes
+                timeout=30,
             )
 
-            if result.returncode != 0:
-                # antiword não está instalado ou falhou
-                raise DocumentProcessingError(
-                    filename,
-                    f"Falha ao processar .doc: {result.stderr}. "
-                    "Converta para .docx e tente novamente."
-                )
+            if result.returncode == 0 and result.stdout.strip():
+                logger.info("DOC extraído via antiword: filename=%r chars=%d",
+                            filename, len(result.stdout))
+                return result.stdout
 
-            full_text = result.stdout
-            if not full_text.strip():
-                raise DocumentProcessingError(filename, "Documento .doc está vazio.")
-
-            logger.info("DOC extraído via antiword: filename=%r chars=%d",
-                        filename, len(full_text))
-            return full_text
-
-        except DocumentProcessingError:
-            raise
-        except subprocess.TimeoutExpired:
-            raise DocumentProcessingError(filename, "Timeout na extração do arquivo .doc.")
-        except FileNotFoundError:
-            raise DocumentProcessingError(
-                filename,
-                "antiword não está instalado. Converta o arquivo para .docx."
-            )
+        except (FileNotFoundError, subprocess.TimeoutExpired):
+            pass
         except Exception as e:
-            raise DocumentProcessingError(filename, str(e)) from e
+            logger.debug("antiword falhou para %r: %s", filename, e)
+
+        raise DocumentProcessingError(
+            filename,
+            "Não foi possível extrair texto do arquivo .doc. "
+            "Converta para .docx e tente novamente."
+        )
+
+    @staticmethod
+    def _extract_doc_olefile(file_bytes: bytes, filename: str) -> str:
+        """
+        Extrai texto de .doc via olefile — parse do Word Binary Format.
+
+        O texto no formato .doc fica no stream 'WordDocument' e '1Table'/'0Table'.
+        Para simplificar, extraímos bytes de texto Unicode do stream WordDocument.
+        """
+        ole = olefile.OleFileIO(io.BytesIO(file_bytes))
+
+        text_parts = []
+
+        # Tenta extrair do stream WordDocument (contém o texto principal)
+        if ole.exists("WordDocument"):
+            word_stream = ole.openstream("WordDocument").read()
+
+            # Extrai strings UTF-16LE do stream binário
+            # O texto do Word Binary fica intercalado com metadados
+            decoded = DocumentService._extract_strings_from_binary(word_stream)
+            if decoded:
+                text_parts.append(decoded)
+
+        # Também verifica se há ObjectPool com textos adicionais
+        for stream_name in ole.listdir():
+            name = "/".join(stream_name)
+            if any(x in name.lower() for x in ["compobj", "summary", "table"]):
+                continue
+            if name == "WordDocument":
+                continue
+            try:
+                data = ole.openstream(stream_name).read()
+                extra = DocumentService._extract_strings_from_binary(data)
+                if extra and len(extra) > 50:
+                    text_parts.append(extra)
+            except Exception:
+                continue
+
+        ole.close()
+
+        full_text = "\n".join(text_parts)
+        full_text = re.sub(r"\n{3,}", "\n\n", full_text)
+
+        if full_text.strip():
+            logger.info("DOC extraído via olefile: filename=%r chars=%d",
+                        filename, len(full_text))
+
+        return full_text
+
+    @staticmethod
+    def _extract_strings_from_binary(data: bytes, min_length: int = 10) -> str:
+        """
+        Extrai strings legíveis (UTF-16LE e ASCII) de dados binários.
+        Filtra strings muito curtas para evitar ruído de metadados.
+        """
+        # Tenta UTF-16LE primeiro (padrão do Word)
+        try:
+            # Procura sequências de chars UTF-16LE printáveis
+            text_parts = []
+            i = 0
+            current = []
+            while i < len(data) - 1:
+                # UTF-16LE: char seguido de 0x00 para ASCII range
+                char_val = struct.unpack_from("<H", data, i)[0]
+                if 0x20 <= char_val < 0xFFFE:
+                    current.append(chr(char_val))
+                else:
+                    if len(current) >= min_length:
+                        text_parts.append("".join(current))
+                    current = []
+                    if char_val in (0x000D, 0x000A):
+                        text_parts.append("\n")
+                i += 2
+
+            if len(current) >= min_length:
+                text_parts.append("".join(current))
+
+            result = "".join(text_parts)
+            # Limpa caracteres de controle residuais
+            result = re.sub(r"[\x00-\x08\x0b\x0c\x0e-\x1f]", "", result)
+            return result.strip()
+        except Exception:
+            return ""
 
     # ------------------------------------------------------------------ #
     # Utilitários

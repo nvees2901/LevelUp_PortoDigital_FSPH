@@ -132,7 +132,7 @@ export async function sendChatMessage(data: ChatRequest): Promise<ChatResponse> 
 
 export interface StreamCallbacks {
   onToken: (token: string) => void;
-  onDone: (meta: { session_id: string; mode: string; generated_term_id: string | null; is_mock: boolean }) => void;
+  onDone: (meta: { session_id: string; mode: string; generated_term_id: string | null }) => void;
   onError: (error: Error) => void;
 }
 
