@@ -2,14 +2,17 @@
 chat.py (route) — Chat IA com 3 modos de operação
 
 POST   /api/v1/chat              → enviar mensagem (cria sessão se necessário)
+POST   /api/v1/chat/stream       → enviar mensagem com resposta streaming (SSE)
 GET    /api/v1/chat/{session_id} → histórico da sessão
 DELETE /api/v1/chat/{session_id} → encerrar sessão
 """
 
+import json
 import uuid
 from typing import Annotated
 
 from fastapi import APIRouter, Depends
+from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
@@ -77,6 +80,74 @@ async def send_message(payload: ChatRequest, db: DbDep):
         mode=session.mode,
         generated_term_id=generated_term_id,
         is_mock=ai_result.get("is_mock", False),
+    )
+
+
+@router.post("/stream")
+async def stream_message(payload: ChatRequest, db: DbDep):
+    """
+    Envia uma mensagem com resposta streaming via SSE.
+
+    O frontend recebe tokens incrementalmente. O último evento SSE é um JSON
+    com metadados: {"done": true, "term_complete": bool, "is_mock": bool}.
+    Após o stream, o histórico é salvo normalmente.
+    """
+    session = await _get_or_create_session(db, payload.session_id, payload.mode)
+    history = [m for m in session.messages if m.get("role") != "system"]
+
+    async def event_generator():
+        full_content = ""
+        term_complete = False
+        is_mock = False
+
+        async for chunk in AIChatService.stream_message(
+            message=payload.message,
+            mode=session.mode,
+            history=history,
+        ):
+            # Tenta parsear como JSON de metadados (último chunk)
+            try:
+                meta = json.loads(chunk)
+                if isinstance(meta, dict) and meta.get("done"):
+                    term_complete = meta.get("term_complete", False)
+                    is_mock = meta.get("is_mock", False)
+                    continue
+            except (json.JSONDecodeError, TypeError):
+                pass
+
+            full_content += chunk
+            yield f"data: {json.dumps({'token': chunk})}\n\n"
+
+        # Salva no histórico
+        session.add_message("user", payload.message)
+        session.add_message("assistant", full_content)
+        await db.flush()
+
+        # Salva TR se gerado
+        generated_term_id = None
+        if term_complete and session.mode == "gerar":
+            term = await TermRepository.create(db, {
+                "title": f"TR gerado via Chat — {session.id}",
+                "category": "outro",
+                "status": "rascunho",
+                "content": full_content,
+            })
+            session.generated_term_id = term.id
+            generated_term_id = str(term.id)
+            await db.flush()
+            logger.info("TR gerado via stream: term_id=%s session_id=%s", term.id, session.id)
+
+        # Evento final com metadados
+        yield f"data: {json.dumps({'done': True, 'session_id': str(session.id), 'mode': session.mode, 'generated_term_id': generated_term_id, 'is_mock': is_mock})}\n\n"
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
     )
 
 

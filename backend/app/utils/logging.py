@@ -25,14 +25,16 @@ def setup_logging() -> None:
     log_format = "%(asctime)s | %(levelname)-8s | %(name)s | %(message)s"
     date_format = "%Y-%m-%d %H:%M:%S"
 
-    logging.basicConfig(
-        level=logging.INFO,
-        format=log_format,
-        datefmt=date_format,
-        handlers=[
-            logging.StreamHandler(sys.stdout),
-        ],
-    )
+    # Força UTF-8 no stdout para evitar erros de encoding no Windows (cp1252)
+    utf8_stream = open(sys.stdout.fileno(), mode="w", encoding="utf-8", closefd=False)
+    handler = logging.StreamHandler(utf8_stream)
+    handler.setFormatter(logging.Formatter(log_format, datefmt=date_format))
+
+    root = logging.getLogger()
+    root.setLevel(logging.INFO)
+    # Remove handlers existentes para evitar duplicação se chamado mais de uma vez
+    root.handlers.clear()
+    root.addHandler(handler)
 
     # Silencia bibliotecas externas verbosas
     _noisy_loggers = [

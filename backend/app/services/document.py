@@ -2,7 +2,7 @@
 document.py — Service de extração de texto de documentos
 
 Responsável por receber um arquivo (bytes) e retornar o texto extraído.
-Suporta: PDF (.pdf), Word moderno (.docx), Word legado (.doc via antiword).
+Suporta: PDF (.pdf), Word moderno (.docx), Word legado (.doc).
 
 Por que este service existe separado?
   A lógica de extração é independente de framework.
@@ -12,18 +12,25 @@ Por que este service existe separado?
 Hierarquia de qualidade de extração:
   1. .docx → python-docx  (perfeito: XML estruturado)
   2. .pdf  → pdfplumber   (bom: preserva layout e tabelas)
-  3. .doc  → antiword     (básico: texto puro, sem formatação)
+  3. .doc  → OLE binary    (parse do Word Binary Format via olefile)
+  4. .doc  → antiword      (fallback CLI, requer instalação no sistema)
 """
 
 import io
+import re
+import struct
 import subprocess
 import tempfile
 
+import olefile
 import pdfplumber
 from docx import Document as DocxDocument
 
 from app.utils.exceptions import DocumentProcessingError, UnsupportedFormatError
 from app.utils.logging import get_logger
+
+# Magic bytes do formato OLE Compound Binary File (usado por .doc antigos)
+_OLE_MAGIC = b"\xd0\xcf\x11\xe0"
 
 logger = get_logger(__name__)
 
@@ -159,6 +166,10 @@ class DocumentService:
 
         O formato .docx é XML estruturado — python-docx parseia os elementos
         nativamente: paragraphs, tables, headers, footers.
+
+        Fallback: alguns .docx têm content type não-padrão (ex: themeManager+xml)
+        que o python-docx rejeita. Nesses casos, extraímos o texto diretamente
+        do XML dentro do ZIP.
         """
         try:
             doc = DocxDocument(io.BytesIO(file_bytes))
@@ -191,7 +202,62 @@ class DocumentService:
         except DocumentProcessingError:
             raise
         except Exception as e:
-            raise DocumentProcessingError(filename, str(e)) from e
+            logger.warning(
+                "python-docx falhou para %r (%s), tentando fallback XML...",
+                filename, e,
+            )
+            return DocumentService._extract_docx_fallback(file_bytes, filename)
+
+    @staticmethod
+    def _extract_docx_fallback(file_bytes: bytes, filename: str) -> str:
+        """
+        Fallback: extrai texto diretamente dos XMLs dentro do ZIP do .docx.
+
+        Útil para arquivos com content type não-padrão que o python-docx rejeita.
+        Lê word/document.xml e quaisquer outros XMLs em word/ para extrair
+        todo o texto disponível.
+        """
+        import re
+        import zipfile
+
+        try:
+            zf = zipfile.ZipFile(io.BytesIO(file_bytes))
+        except zipfile.BadZipFile:
+            raise DocumentProcessingError(
+                filename, "Arquivo não é um DOCX válido (ZIP corrompido)."
+            )
+
+        ns = "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}"
+        text_parts: list[str] = []
+
+        xml_targets = [n for n in zf.namelist() if n.startswith("word/") and n.endswith(".xml")]
+        # Prioriza word/document.xml
+        xml_targets.sort(key=lambda n: (0 if "document" in n else 1, n))
+
+        for xml_name in xml_targets:
+            try:
+                from xml.etree import ElementTree as ET
+                tree = ET.fromstring(zf.read(xml_name))
+                for t_elem in tree.iter(f"{ns}t"):
+                    if t_elem.text:
+                        text_parts.append(t_elem.text)
+            except ET.ParseError:
+                continue
+
+        zf.close()
+
+        full_text = " ".join(text_parts)
+        # Normaliza espaços duplicados e quebras
+        full_text = re.sub(r" {2,}", " ", full_text)
+
+        if not full_text.strip():
+            raise DocumentProcessingError(filename, "Não foi possível extrair texto do DOCX.")
+
+        logger.info(
+            "DOCX extraído (fallback XML): filename=%r chars=%d",
+            filename, len(full_text),
+        )
+        return full_text
 
     @staticmethod
     def _extract_doc(file_bytes: bytes, filename: str) -> str:

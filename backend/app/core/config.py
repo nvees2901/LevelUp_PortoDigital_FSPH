@@ -9,24 +9,27 @@ Por que pydantic-settings?
 """
 
 from functools import lru_cache
+from pathlib import Path
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+# Raiz do projeto (backend/../ → raiz do monorepo)
+_PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent.parent
 
 
 class Settings(BaseSettings):
     # ------------------------------------------------------------------ #
     # Banco de dados
     # ------------------------------------------------------------------ #
-    DATABASE_URL: str = "postgresql+asyncpg://postgres:postgres@localhost:5432/fsph"
+    DATABASE_URL: str = "postgresql+asyncpg://postgres:postgres@localhost:5433/fsph"
     # "postgresql+asyncpg" é o driver async do SQLAlchemy para PostgreSQL
     # Em produção, este valor vem do .env — nunca hardcode credenciais
 
     # ------------------------------------------------------------------ #
-    # Cache
+    # Inteligência Artificial — Ollama (local, mais rápido)
     # ------------------------------------------------------------------ #
-    REDIS_URL: str = "redis://localhost:6379"
-    # Redis é usado para cachear histórico de sessões de chat
-    # Evita consultas ao banco a cada mensagem enviada
+    OLLAMA_BASE_URL: str = ""       # Ex: "http://localhost:11434/v1"
+    OLLAMA_MODEL: str = "llama3.2"  # Modelo instalado no Ollama
 
     # ------------------------------------------------------------------ #
     # Inteligência Artificial — OpenRouter
@@ -42,8 +45,10 @@ class Settings(BaseSettings):
     # ------------------------------------------------------------------ #
     # RAG / Banco Vetorial
     # ------------------------------------------------------------------ #
-    DOCS_PATH: str = "../docs"       # pasta com Lei 14133 e TRs aprovados
-    CHROMA_DB_PATH: str = "./chroma_db"  # persistência do ChromaDB
+    RAG_ENABLED: bool = False   # True para usar RAG (requer ChromaDB rodando)
+    CHROMA_HOST: str = "localhost"  # host do ChromaDB server (Docker: "chromadb")
+    CHROMA_PORT: int = 8100        # porta do ChromaDB server (Docker interna: 8000)
+    DOCS_PATH: str = str(_PROJECT_ROOT / "docs")  # pasta com Lei 14133 e TRs aprovados
 
     # ------------------------------------------------------------------ #
     # Segurança
@@ -62,7 +67,12 @@ class Settings(BaseSettings):
     # ------------------------------------------------------------------ #
     # CORS (Cross-Origin Resource Sharing)
     # ------------------------------------------------------------------ #
-    CORS_ORIGINS: list[str] = ["http://localhost:3000", "http://127.0.0.1:3000"]
+    CORS_ORIGINS: list[str] = [
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+    ]
     # Lista de origens que podem chamar a API
     # O Next.js roda na porta 3000, então precisa estar aqui
 
@@ -82,26 +92,33 @@ class Settings(BaseSettings):
 
     @property
     def is_mock_mode(self) -> bool:
-        """Retorna True se nenhuma chave de IA está configurada."""
+        """Retorna True se nenhuma fonte de IA está configurada."""
+        has_ollama = bool(self.OLLAMA_BASE_URL.strip())
         has_openrouter = bool(self.OPENROUTER_API_KEY.strip())
         has_openai = bool(self.OPENAI_API_KEY.strip())
-        return not (has_openrouter or has_openai)
+        return not (has_ollama or has_openrouter or has_openai)
 
     @property
     def active_api_key(self) -> str:
-        """Retorna a chave ativa: OpenRouter tem prioridade sobre OpenAI."""
+        """Retorna a chave ativa. Ollama não precisa de chave (usa placeholder)."""
+        if self.OLLAMA_BASE_URL.strip():
+            return "ollama"  # Ollama não exige API key
         return self.OPENROUTER_API_KEY.strip() or self.OPENAI_API_KEY.strip()
 
     @property
     def active_base_url(self) -> str | None:
-        """Retorna a URL base da API ativa (None = OpenAI padrão)."""
+        """Retorna a URL base: Ollama > OpenRouter > OpenAI padrão."""
+        if self.OLLAMA_BASE_URL.strip():
+            return self.OLLAMA_BASE_URL.strip()
         if self.OPENROUTER_API_KEY.strip():
             return self.OPENROUTER_BASE_URL
         return None
 
     @property
     def active_model(self) -> str:
-        """Retorna o modelo ativo baseado na chave configurada."""
+        """Retorna o modelo ativo: Ollama > OpenRouter > OpenAI."""
+        if self.OLLAMA_BASE_URL.strip():
+            return self.OLLAMA_MODEL
         if self.OPENROUTER_API_KEY.strip():
             return self.OPENROUTER_MODEL
         return self.OPENAI_MODEL

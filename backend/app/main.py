@@ -16,7 +16,6 @@ Como rodar:
   uv run dev
 """
 
-import asyncio
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -25,7 +24,6 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.api.routes import analysis, chat, dashboard, terms, upload
 from app.core.config import settings
 from app.core.database import engine
-from app.services.rag_service import RagService
 from app.utils.exceptions import register_exception_handlers
 from app.utils.logging import get_logger, setup_logging
 
@@ -65,8 +63,9 @@ async def lifespan(app: FastAPI):
     # Verifica a conexão com o banco ao iniciar
     # (não cria tabelas — isso é responsabilidade do Alembic)
     try:
-        async with engine.begin() as conn:
-            await conn.run_sync(lambda c: c.execute(c.dialect.do_ping(c)))
+        from sqlalchemy import text
+        async with engine.connect() as conn:
+            await conn.execute(text("SELECT 1"))
         logger.info("✓ Conexão com PostgreSQL estabelecida")
     except Exception as e:
         logger.warning(
@@ -75,26 +74,29 @@ async def lifespan(app: FastAPI):
             str(e),
         )
 
-    # Inicializa o ChromaDB e modelo de embedding de forma síncrona (rápido ~5s)
-    # A indexação dos documentos é disparada em background para não bloquear o startup
-    try:
-        logger.info("Inicializando RAG (ChromaDB + embeddings)...")
-        await asyncio.to_thread(RagService.setup)
-        logger.info("✓ RAG pronto — indexação de documentos iniciada em background")
-    except Exception as e:
-        logger.warning("⚠ RAG não inicializado: %s — chat e análise funcionarão sem contexto vetorial.", str(e))
+    # RAG (ChromaDB server via Docker) — indexação em background no startup
+    if settings.RAG_ENABLED:
+        logger.info(
+            "RAG habilitado — ChromaDB em %s:%s",
+            settings.CHROMA_HOST, settings.CHROMA_PORT,
+        )
+        # Indexa documentos em background para não bloquear o startup
+        import asyncio
 
-    # Dispara a indexação em background (não bloqueia o startup)
-    indexing_task = asyncio.create_task(
-        asyncio.to_thread(RagService.index_documents)
-    )
+        async def _index_in_background() -> None:
+            try:
+                from app.services.rag_service import RagService
+                await asyncio.to_thread(RagService.setup)
+                await asyncio.to_thread(RagService.index_documents)
+                logger.info("✓ RAG: indexação em background concluída")
+            except Exception as e:
+                logger.warning("RAG: indexação em background falhou (será tentada na primeira busca): %s", e)
+
+        asyncio.create_task(_index_in_background())
+    else:
+        logger.info("RAG desabilitado (RAG_ENABLED=false) — chat funcionará sem contexto vetorial")
 
     yield  # ← aplicação está rodando aqui
-
-    # Aguarda indexação terminar antes de encerrar (se ainda estiver rodando)
-    if not indexing_task.done():
-        logger.info("Aguardando indexação em background finalizar...")
-        await indexing_task
 
     # ---- SHUTDOWN ----
     logger.info("Encerrando aplicação, fechando pool de conexões...")
