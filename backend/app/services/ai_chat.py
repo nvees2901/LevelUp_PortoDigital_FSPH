@@ -23,6 +23,17 @@ logger = get_logger(__name__)
 # Timeout para chamadas à API (em segundos)
 _API_TIMEOUT = 60.0
 
+# Gemini client singleton
+_gemini_client = None
+
+def _get_gemini_client():
+    """Retorna o cliente Gemini singleton."""
+    global _gemini_client
+    if _gemini_client is None:
+        from google import genai
+        _gemini_client = genai.Client(api_key=settings.GEMINI_API_KEY)
+    return _gemini_client
+
 
 # ------------------------------------------------------------------ #
 # System Prompts por modo de chat
@@ -159,6 +170,9 @@ class AIChatService:
         # Busca contexto RAG em thread separada (CPU-bound, não bloqueia event loop)
         rag_context = await asyncio.to_thread(cls._get_rag_context, message, mode)
 
+        if settings.is_gemini_mode:
+            return await cls._gemini_response(message, mode, history, rag_context)
+
         return await cls._openrouter_response(message, mode, history, rag_context)
 
     # ------------------------------------------------------------------ #
@@ -191,6 +205,12 @@ class AIChatService:
             return
 
         rag_context = await asyncio.to_thread(cls._get_rag_context, message, mode)
+
+        if settings.is_gemini_mode:
+            async for chunk in cls._gemini_stream(message, mode, history, rag_context):
+                yield chunk
+            return
+
         async for chunk in cls._openrouter_stream(message, mode, history, rag_context):
             yield chunk
 
@@ -260,6 +280,130 @@ class AIChatService:
         except Exception as e:
             logger.error("Erro OpenRouter stream: %s", str(e), exc_info=True)
             # Fallback: retorna mock completo
+            result = cls._mock_response(mode, history)
+            yield result["content"]
+            yield json.dumps({"done": True, "term_complete": False, "is_mock": True})
+
+    # ------------------------------------------------------------------ #
+    # Gemini
+    # ------------------------------------------------------------------ #
+
+    @classmethod
+    async def _gemini_response(
+        cls,
+        message: str,
+        mode: str,
+        history: list[dict[str, str]],
+        rag_context: str,
+    ) -> dict[str, Any]:
+        """Chama Gemini via google-genai SDK."""
+        system_content = SYSTEM_PROMPTS[mode].format(
+            rag_context=rag_context if rag_context else "(sem contexto adicional disponível)"
+        )
+
+        # Gemini usa formato de contents diferente do OpenAI
+        contents = []
+        for msg in history:
+            role = "user" if msg["role"] == "user" else "model"
+            contents.append({"role": role, "parts": [{"text": msg["content"]}]})
+        contents.append({"role": "user", "parts": [{"text": message}]})
+
+        client = _get_gemini_client()
+
+        logger.info(
+            "Gemini request: model=%s mode=%s msgs=%d",
+            settings.GEMINI_MODEL, mode, len(contents),
+        )
+
+        try:
+            response = await asyncio.to_thread(
+                client.models.generate_content,
+                model=settings.GEMINI_MODEL,
+                contents=contents,
+                config={
+                    "system_instruction": system_content,
+                    "max_output_tokens": 2500,
+                    "temperature": 0.4,
+                },
+            )
+
+            content = response.text or ""
+
+            term_complete = (
+                mode == "gerar"
+                and any(kw in content for kw in [
+                    "TERMO DE REFERÊNCIA", "Art. 6", "justificativa:",
+                    "Objeto:", "1. OBJETO", "1. Objeto",
+                ])
+            )
+
+            logger.info("Gemini response: chars=%d term_complete=%s", len(content), term_complete)
+
+            return {"content": content, "is_mock": False, "term_complete": term_complete}
+
+        except Exception as e:
+            logger.error("Erro Gemini: %s", str(e), exc_info=True)
+            logger.warning("Fallback para mock após erro Gemini")
+            return cls._mock_response(mode, history)
+
+    @classmethod
+    async def _gemini_stream(
+        cls,
+        message: str,
+        mode: str,
+        history: list[dict[str, str]],
+        rag_context: str,
+    ) -> AsyncGenerator[str, None]:
+        """Streaming via Gemini SDK."""
+        import json
+
+        system_content = SYSTEM_PROMPTS[mode].format(
+            rag_context=rag_context if rag_context else "(sem contexto adicional disponível)"
+        )
+
+        contents = []
+        for msg in history:
+            role = "user" if msg["role"] == "user" else "model"
+            contents.append({"role": role, "parts": [{"text": msg["content"]}]})
+        contents.append({"role": "user", "parts": [{"text": message}]})
+
+        client = _get_gemini_client()
+
+        logger.info(
+            "Gemini stream request: model=%s mode=%s msgs=%d",
+            settings.GEMINI_MODEL, mode, len(contents),
+        )
+
+        full_content = ""
+        try:
+            response_stream = await asyncio.to_thread(
+                client.models.generate_content_stream,
+                model=settings.GEMINI_MODEL,
+                contents=contents,
+                config={
+                    "system_instruction": system_content,
+                    "max_output_tokens": 2500,
+                    "temperature": 0.4,
+                },
+            )
+
+            for chunk in response_stream:
+                if chunk.text:
+                    full_content += chunk.text
+                    yield chunk.text
+
+            term_complete = (
+                mode == "gerar"
+                and any(kw in full_content for kw in [
+                    "TERMO DE REFERÊNCIA", "Art. 6", "justificativa:",
+                    "Objeto:", "1. OBJETO", "1. Objeto",
+                ])
+            )
+
+            yield json.dumps({"done": True, "term_complete": term_complete, "is_mock": False})
+
+        except Exception as e:
+            logger.error("Erro Gemini stream: %s", str(e), exc_info=True)
             result = cls._mock_response(mode, history)
             yield result["content"]
             yield json.dumps({"done": True, "term_complete": False, "is_mock": True})
