@@ -26,6 +26,12 @@ class Settings(BaseSettings):
     # Em produção, este valor vem do .env — nunca hardcode credenciais
 
     # ------------------------------------------------------------------ #
+    # Inteligência Artificial — Gemini (Google)
+    # ------------------------------------------------------------------ #
+    GEMINI_API_KEY: str = ""
+    GEMINI_MODEL: str = "gemini-2.0-flash"
+
+    # ------------------------------------------------------------------ #
     # Inteligência Artificial — Ollama (local, mais rápido)
     # ------------------------------------------------------------------ #
     OLLAMA_BASE_URL: str = ""       # Ex: "http://localhost:11434/v1"
@@ -48,7 +54,7 @@ class Settings(BaseSettings):
     RAG_ENABLED: bool = False   # True para usar RAG (requer ChromaDB rodando)
     CHROMA_HOST: str = "localhost"  # host do ChromaDB server (Docker: "chromadb")
     CHROMA_PORT: int = 8100        # porta do ChromaDB server (Docker interna: 8000)
-    DOCS_PATH: str = str(_PROJECT_ROOT / "docs")  # pasta com Lei 14133 e TRs aprovados
+    DOCS_PATH: str = str(_PROJECT_ROOT / "documents")  # pasta com Lei 14133 e TRs aprovados
 
     # ------------------------------------------------------------------ #
     # Segurança
@@ -93,21 +99,26 @@ class Settings(BaseSettings):
     @property
     def is_mock_mode(self) -> bool:
         """Retorna True se nenhuma fonte de IA está configurada."""
+        has_gemini = bool(self.GEMINI_API_KEY.strip())
         has_ollama = bool(self.OLLAMA_BASE_URL.strip())
         has_openrouter = bool(self.OPENROUTER_API_KEY.strip())
         has_openai = bool(self.OPENAI_API_KEY.strip())
-        return not (has_ollama or has_openrouter or has_openai)
+        return not (has_gemini or has_ollama or has_openrouter or has_openai)
 
     @property
     def active_api_key(self) -> str:
-        """Retorna a chave ativa. Ollama não precisa de chave (usa placeholder)."""
+        """Retorna a chave ativa. Gemini tem prioridade, Ollama não precisa de chave."""
+        if self.GEMINI_API_KEY.strip():
+            return self.GEMINI_API_KEY.strip()
         if self.OLLAMA_BASE_URL.strip():
-            return "ollama"  # Ollama não exige API key
+            return "ollama"
         return self.OPENROUTER_API_KEY.strip() or self.OPENAI_API_KEY.strip()
 
     @property
     def active_base_url(self) -> str | None:
-        """Retorna a URL base: Ollama > OpenRouter > OpenAI padrão."""
+        """Retorna a URL base. Gemini usa SDK próprio (não precisa de base_url)."""
+        if self.GEMINI_API_KEY.strip():
+            return None  # Gemini usa SDK próprio, não AsyncOpenAI
         if self.OLLAMA_BASE_URL.strip():
             return self.OLLAMA_BASE_URL.strip()
         if self.OPENROUTER_API_KEY.strip():
@@ -116,12 +127,32 @@ class Settings(BaseSettings):
 
     @property
     def active_model(self) -> str:
-        """Retorna o modelo ativo: Ollama > OpenRouter > OpenAI."""
+        """Retorna o modelo ativo: Gemini > Ollama > OpenRouter > OpenAI."""
+        if self.GEMINI_API_KEY.strip():
+            return self.GEMINI_MODEL
         if self.OLLAMA_BASE_URL.strip():
             return self.OLLAMA_MODEL
         if self.OPENROUTER_API_KEY.strip():
             return self.OPENROUTER_MODEL
         return self.OPENAI_MODEL
+
+    @property
+    def is_gemini_mode(self) -> bool:
+        """True se Gemini é o provider ativo."""
+        return bool(self.GEMINI_API_KEY.strip())
+
+    @property
+    def active_provider_name(self) -> str:
+        """Nome legível do provedor ativo para logs."""
+        if self.GEMINI_API_KEY.strip():
+            return "Gemini"
+        if self.OLLAMA_BASE_URL.strip():
+            return "Ollama"
+        if self.OPENROUTER_API_KEY.strip():
+            return "OpenRouter"
+        if self.OPENAI_API_KEY.strip():
+            return "OpenAI"
+        return "none"
 
     # ------------------------------------------------------------------ #
     # Leitura do arquivo .env

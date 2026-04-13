@@ -154,6 +154,7 @@ class TermRepository:
                 setattr(term, field, value)
 
         await session.flush()
+        await session.refresh(term)
         logger.info("TR atualizado: id=%s campos=%s", term_id, list(data.keys()))
         return term
 

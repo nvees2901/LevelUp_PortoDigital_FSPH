@@ -11,7 +11,7 @@ import json
 import uuid
 from typing import Annotated
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -19,7 +19,7 @@ from app.core.database import get_db
 from app.models.chat_session import ChatSession
 from app.repositories.term import TermRepository
 from app.schemas.chat import ChatRequest, ChatResponse, ChatSessionResponse, ChatMessage
-from app.services.ai_chat import AIChatService
+from app.services.ai_chat import AIChatService, AINotConfiguredError, AIProviderError
 from app.utils.exceptions import ChatSessionNotFoundError
 from app.utils.logging import get_logger
 
@@ -38,7 +38,7 @@ async def send_message(payload: ChatRequest, db: DbDep):
     Fluxo:
       - Se session_id não fornecido: cria nova sessão com system prompt
       - Se session_id fornecido: continua sessão existente
-      - Chama OpenAI (ou mock) com histórico completo
+      - Chama o provedor de IA configurado com histórico completo
       - Salva a nova mensagem no histórico
       - Se modo 'gerar' e TR completo detectado: salva TR automaticamente
     """
@@ -49,11 +49,16 @@ async def send_message(payload: ChatRequest, db: DbDep):
     history = [m for m in session.messages if m.get("role") != "system"]
 
     # --- Chama o serviço de IA ---
-    ai_result = await AIChatService.process_message(
-        message=payload.message,
-        mode=session.mode,
-        history=history,
-    )
+    try:
+        ai_result = await AIChatService.process_message(
+            message=payload.message,
+            mode=session.mode,
+            history=history,
+        )
+    except AINotConfiguredError as e:
+        raise HTTPException(status_code=503, detail=str(e))
+    except AIProviderError as e:
+        raise HTTPException(status_code=502, detail=str(e))
 
     # --- Atualiza histórico na sessão ---
     session.add_message("user", payload.message)
@@ -79,7 +84,6 @@ async def send_message(payload: ChatRequest, db: DbDep):
         session_id=str(session.id),
         mode=session.mode,
         generated_term_id=generated_term_id,
-        is_mock=ai_result.get("is_mock", False),
     )
 
 
@@ -89,16 +93,20 @@ async def stream_message(payload: ChatRequest, db: DbDep):
     Envia uma mensagem com resposta streaming via SSE.
 
     O frontend recebe tokens incrementalmente. O último evento SSE é um JSON
-    com metadados: {"done": true, "term_complete": bool, "is_mock": bool}.
+    com metadados: {"done": true, "term_complete": bool}.
     Após o stream, o histórico é salvo normalmente.
     """
     session = await _get_or_create_session(db, payload.session_id, payload.mode)
     history = [m for m in session.messages if m.get("role") != "system"]
 
+    try:
+        AIChatService._ensure_configured()
+    except AINotConfiguredError as e:
+        raise HTTPException(status_code=503, detail=str(e))
+
     async def event_generator():
         full_content = ""
         term_complete = False
-        is_mock = False
 
         async for chunk in AIChatService.stream_message(
             message=payload.message,
@@ -110,7 +118,6 @@ async def stream_message(payload: ChatRequest, db: DbDep):
                 meta = json.loads(chunk)
                 if isinstance(meta, dict) and meta.get("done"):
                     term_complete = meta.get("term_complete", False)
-                    is_mock = meta.get("is_mock", False)
                     continue
             except (json.JSONDecodeError, TypeError):
                 pass
@@ -138,7 +145,7 @@ async def stream_message(payload: ChatRequest, db: DbDep):
             logger.info("TR gerado via stream: term_id=%s session_id=%s", term.id, session.id)
 
         # Evento final com metadados
-        yield f"data: {json.dumps({'done': True, 'session_id': str(session.id), 'mode': session.mode, 'generated_term_id': generated_term_id, 'is_mock': is_mock})}\n\n"
+        yield f"data: {json.dumps({'done': True, 'session_id': str(session.id), 'mode': session.mode, 'generated_term_id': generated_term_id})}\n\n"
 
     return StreamingResponse(
         event_generator(),

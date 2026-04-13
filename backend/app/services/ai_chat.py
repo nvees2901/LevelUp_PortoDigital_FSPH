@@ -1,14 +1,11 @@
 """
-ai_chat.py — Integração com OpenRouter (Llama 3.3 70B) + RAG + Modo Mock
+ai_chat.py — Integração com provedores de IA (Gemini, Ollama, OpenRouter, OpenAI) + RAG
 
 Fluxo:
   1. RAG: busca trechos relevantes da Lei 14133 e TRs aprovados
   2. Injeta contexto RAG no system prompt
-  3. Chama OpenRouter com Llama 3.3 70B (gratuito)
-  4. Fallback para mock se sem API key
-
-Compatibilidade: OpenRouter usa exatamente a mesma API do OpenAI —
-apenas mudamos base_url e adicionamos os headers exigidos.
+  3. Chama o provedor de IA configurado
+  4. Retorna erro se nenhum provedor configurado
 """
 
 import asyncio
@@ -22,6 +19,17 @@ logger = get_logger(__name__)
 
 # Timeout para chamadas à API (em segundos)
 _API_TIMEOUT = 60.0
+
+# Gemini client singleton
+_gemini_client = None
+
+def _get_gemini_client():
+    """Retorna o cliente Gemini singleton."""
+    global _gemini_client
+    if _gemini_client is None:
+        from google import genai
+        _gemini_client = genai.Client(api_key=settings.GEMINI_API_KEY)
+    return _gemini_client
 
 
 # ------------------------------------------------------------------ #
@@ -89,34 +97,29 @@ Use os documentos abaixo como base para suas respostas.
 }
 
 
-# ------------------------------------------------------------------ #
-# Respostas Mock
-# ------------------------------------------------------------------ #
+class AINotConfiguredError(Exception):
+    """Raised when no AI provider is configured."""
+    pass
 
-MOCK_RESPONSES: dict[str, list[str]] = {
-    "gerar": [
-        "Olá! Sou o assistente de criação de TRs da FSPH. "
-        "Para criarmos um Termo de Referência conforme a Lei 14.133/2021, "
-        "preciso saber: **qual é o objeto da contratação?** "
-        "(Ex: 'serviço de capacitação em gestão', 'aquisição de computadores')\n\n"
-        "*(Modo demonstração — configure OPENROUTER_API_KEY para IA real)*",
-    ],
-    "analisar": [
-        "Analisarei o documento conforme a Lei 14.133/2021.\n\n"
-        "**[MODO DEMONSTRAÇÃO]**\n"
-        "Configure `OPENROUTER_API_KEY` no `.env` para análise completa via IA.",
-    ],
-    "consultar": [
-        "Posso ajudar com dúvidas sobre TRs e a Lei 14.133/2021.\n\n"
-        "*(Modo demonstração — configure OPENROUTER_API_KEY para IA real)*",
-    ],
-}
+
+class AIProviderError(Exception):
+    """Raised when an AI provider returns an error (rate limit, auth, etc)."""
+    pass
 
 
 class AIChatService:
 
     _client: Any = None  # AsyncOpenAI singleton
     _client_key: str = ""  # Chave usada para criar o client (detecta mudanças)
+
+    @classmethod
+    def _ensure_configured(cls) -> None:
+        """Raises AINotConfiguredError if no AI provider is available."""
+        if settings.is_mock_mode:
+            raise AINotConfiguredError(
+                "Nenhum provedor de IA configurado. "
+                "Configure GEMINI_API_KEY, OPENROUTER_API_KEY, OLLAMA_BASE_URL ou OPENAI_API_KEY no .env"
+            )
 
     @classmethod
     def _get_client(cls) -> Any:
@@ -149,17 +152,18 @@ class AIChatService:
         Returns:
             {
               "content": str,
-              "is_mock": bool,
               "term_complete": bool
             }
         """
-        if settings.is_mock_mode:
-            return cls._mock_response(mode, history)
+        cls._ensure_configured()
 
         # Busca contexto RAG em thread separada (CPU-bound, não bloqueia event loop)
         rag_context = await asyncio.to_thread(cls._get_rag_context, message, mode)
 
-        return await cls._openrouter_response(message, mode, history, rag_context)
+        if settings.is_gemini_mode:
+            return await cls._gemini_response(message, mode, history, rag_context)
+
+        return await cls._openai_compat_response(message, mode, history, rag_context)
 
     # ------------------------------------------------------------------ #
     # Streaming
@@ -179,30 +183,27 @@ class AIChatService:
             Chunks de texto conforme chegam da API.
             O último yield é um JSON com metadados: {"done": true, "term_complete": bool}
         """
-        import json
-
-        if settings.is_mock_mode:
-            result = cls._mock_response(mode, history)
-            # Simula streaming do mock em pedaços
-            content = result["content"]
-            for i in range(0, len(content), 8):
-                yield content[i : i + 8]
-            yield json.dumps({"done": True, "term_complete": False, "is_mock": True})
-            return
+        cls._ensure_configured()
 
         rag_context = await asyncio.to_thread(cls._get_rag_context, message, mode)
-        async for chunk in cls._openrouter_stream(message, mode, history, rag_context):
+
+        if settings.is_gemini_mode:
+            async for chunk in cls._gemini_stream(message, mode, history, rag_context):
+                yield chunk
+            return
+
+        async for chunk in cls._openai_compat_stream(message, mode, history, rag_context):
             yield chunk
 
     @classmethod
-    async def _openrouter_stream(
+    async def _openai_compat_stream(
         cls,
         message: str,
         mode: str,
         history: list[dict[str, str]],
         rag_context: str,
     ) -> AsyncGenerator[str, None]:
-        """Streaming via OpenRouter com SSE."""
+        """Streaming via provedor OpenAI-compatible (Ollama/OpenRouter/OpenAI)."""
         import json
 
         system_content = SYSTEM_PROMPTS[mode].format(
@@ -225,7 +226,8 @@ class AIChatService:
             }
 
         logger.info(
-            "OpenRouter stream request: model=%s mode=%s msgs=%d",
+            "%s stream request: model=%s mode=%s msgs=%d",
+            settings.active_provider_name,
             settings.active_model, mode, len(messages),
         )
 
@@ -245,51 +247,153 @@ class AIChatService:
                 if delta and delta.content:
                     full_content += delta.content
                     yield delta.content
-
-            # Detecta se TR foi gerado
-            term_complete = (
-                mode == "gerar"
-                and any(kw in full_content for kw in [
-                    "TERMO DE REFERÊNCIA", "Art. 6", "justificativa:",
-                    "Objeto:", "1. OBJETO", "1. Objeto",
-                ])
-            )
-
-            yield json.dumps({"done": True, "term_complete": term_complete, "is_mock": False})
-
         except Exception as e:
-            logger.error("Erro OpenRouter stream: %s", str(e), exc_info=True)
-            # Fallback: retorna mock completo
-            result = cls._mock_response(mode, history)
-            yield result["content"]
-            yield json.dumps({"done": True, "term_complete": False, "is_mock": True})
+            logger.error("Erro %s stream: %s", settings.active_provider_name, str(e), exc_info=True)
+            raise AIProviderError(f"Erro ao chamar provedor de IA: {e}") from e
+
+        # Detecta se TR foi gerado
+        term_complete = (
+            mode == "gerar"
+            and any(kw in full_content for kw in [
+                "TERMO DE REFERÊNCIA", "Art. 6", "justificativa:",
+                "Objeto:", "1. OBJETO", "1. Objeto",
+            ])
+        )
+
+        yield json.dumps({"done": True, "term_complete": term_complete, })
 
     # ------------------------------------------------------------------ #
-    # Modo Mock
-    # ------------------------------------------------------------------ #
-
-    @classmethod
-    def _mock_response(
-        cls, mode: str, history: list[dict[str, str]]
-    ) -> dict[str, Any]:
-        responses = MOCK_RESPONSES.get(mode, MOCK_RESPONSES["consultar"])
-        user_turns = sum(1 for m in history if m.get("role") == "user")
-        idx = min(user_turns, len(responses) - 1)
-        return {"content": responses[idx], "is_mock": True, "term_complete": False}
-
-    # ------------------------------------------------------------------ #
-    # OpenRouter
+    # Gemini
     # ------------------------------------------------------------------ #
 
     @classmethod
-    async def _openrouter_response(
+    async def _gemini_response(
         cls,
         message: str,
         mode: str,
         history: list[dict[str, str]],
         rag_context: str,
     ) -> dict[str, Any]:
-        """Chama o Llama 3.3 70B via OpenRouter com contexto RAG."""
+        """Chama Gemini via google-genai SDK."""
+        system_content = SYSTEM_PROMPTS[mode].format(
+            rag_context=rag_context if rag_context else "(sem contexto adicional disponível)"
+        )
+
+        # Gemini usa formato de contents diferente do OpenAI
+        contents = []
+        for msg in history:
+            role = "user" if msg["role"] == "user" else "model"
+            contents.append({"role": role, "parts": [{"text": msg["content"]}]})
+        contents.append({"role": "user", "parts": [{"text": message}]})
+
+        client = _get_gemini_client()
+
+        logger.info(
+            "Gemini request: model=%s mode=%s msgs=%d",
+            settings.GEMINI_MODEL, mode, len(contents),
+        )
+
+        try:
+            response = await asyncio.to_thread(
+                client.models.generate_content,
+                model=settings.GEMINI_MODEL,
+                contents=contents,
+                config={
+                    "system_instruction": system_content,
+                    "max_output_tokens": 2500,
+                    "temperature": 0.4,
+                },
+            )
+        except Exception as e:
+            logger.error("Erro Gemini: %s", str(e), exc_info=True)
+            raise AIProviderError(f"Erro ao chamar Gemini: {e}") from e
+
+        content = response.text or ""
+
+        term_complete = (
+            mode == "gerar"
+            and any(kw in content for kw in [
+                "TERMO DE REFERÊNCIA", "Art. 6", "justificativa:",
+                "Objeto:", "1. OBJETO", "1. Objeto",
+            ])
+        )
+
+        logger.info("Gemini response: chars=%d term_complete=%s", len(content), term_complete)
+
+        return {"content": content, "term_complete": term_complete}
+
+    @classmethod
+    async def _gemini_stream(
+        cls,
+        message: str,
+        mode: str,
+        history: list[dict[str, str]],
+        rag_context: str,
+    ) -> AsyncGenerator[str, None]:
+        """Streaming via Gemini SDK."""
+        import json
+
+        system_content = SYSTEM_PROMPTS[mode].format(
+            rag_context=rag_context if rag_context else "(sem contexto adicional disponível)"
+        )
+
+        contents = []
+        for msg in history:
+            role = "user" if msg["role"] == "user" else "model"
+            contents.append({"role": role, "parts": [{"text": msg["content"]}]})
+        contents.append({"role": "user", "parts": [{"text": message}]})
+
+        client = _get_gemini_client()
+
+        logger.info(
+            "Gemini stream request: model=%s mode=%s msgs=%d",
+            settings.GEMINI_MODEL, mode, len(contents),
+        )
+
+        full_content = ""
+        try:
+            response_stream = await asyncio.to_thread(
+                client.models.generate_content_stream,
+                model=settings.GEMINI_MODEL,
+                contents=contents,
+                config={
+                    "system_instruction": system_content,
+                    "max_output_tokens": 2500,
+                    "temperature": 0.4,
+                },
+            )
+
+            for chunk in response_stream:
+                if chunk.text:
+                    full_content += chunk.text
+                    yield chunk.text
+        except Exception as e:
+            logger.error("Erro Gemini stream: %s", str(e), exc_info=True)
+            raise AIProviderError(f"Erro ao chamar Gemini: {e}") from e
+
+        term_complete = (
+            mode == "gerar"
+            and any(kw in full_content for kw in [
+                "TERMO DE REFERÊNCIA", "Art. 6", "justificativa:",
+                "Objeto:", "1. OBJETO", "1. Objeto",
+            ])
+        )
+
+        yield json.dumps({"done": True, "term_complete": term_complete})
+
+    # ------------------------------------------------------------------ #
+    # OpenAI-compatible (Ollama / OpenRouter / OpenAI)
+    # ------------------------------------------------------------------ #
+
+    @classmethod
+    async def _openai_compat_response(
+        cls,
+        message: str,
+        mode: str,
+        history: list[dict[str, str]],
+        rag_context: str,
+    ) -> dict[str, Any]:
+        """Chama o modelo ativo via provedor OpenAI-compatible (Ollama/OpenRouter/OpenAI)."""
         system_content = SYSTEM_PROMPTS[mode].format(
             rag_context=rag_context if rag_context else "(sem contexto adicional disponível)"
         )
@@ -310,7 +414,8 @@ class AIChatService:
             }
 
         logger.info(
-            "OpenRouter request: model=%s mode=%s rag_chunks=%d msgs=%d",
+            "%s request: model=%s mode=%s rag_chunks=%d msgs=%d",
+            settings.active_provider_name,
             settings.active_model, mode,
             len(rag_context.split("\n")) if rag_context else 0,
             len(messages),
@@ -324,30 +429,29 @@ class AIChatService:
                 temperature=0.4,  # mais determinístico para análise jurídica
                 extra_headers=extra_headers,
             )
-
-            content = response.choices[0].message.content or ""
-
-            # Detecta se TR foi gerado (modo 'gerar')
-            term_complete = (
-                mode == "gerar"
-                and any(kw in content for kw in [
-                    "TERMO DE REFERÊNCIA", "Art. 6", "justificativa:",
-                    "Objeto:", "1. OBJETO", "1. Objeto",
-                ])
-            )
-
-            logger.info(
-                "OpenRouter response: tokens=%s term_complete=%s",
-                getattr(response.usage, "total_tokens", "?"),
-                term_complete,
-            )
-
-            return {"content": content, "is_mock": False, "term_complete": term_complete}
-
         except Exception as e:
-            logger.error("Erro OpenRouter: %s", str(e), exc_info=True)
-            logger.warning("Fallback para mock após erro de API")
-            return cls._mock_response(mode, history)
+            logger.error("Erro %s: %s", settings.active_provider_name, str(e), exc_info=True)
+            raise AIProviderError(f"Erro ao chamar provedor de IA: {e}") from e
+
+        content = response.choices[0].message.content or ""
+
+        # Detecta se TR foi gerado (modo 'gerar')
+        term_complete = (
+            mode == "gerar"
+            and any(kw in content for kw in [
+                "TERMO DE REFERÊNCIA", "Art. 6", "justificativa:",
+                "Objeto:", "1. OBJETO", "1. Objeto",
+            ])
+        )
+
+        logger.info(
+            "%s response: tokens=%s term_complete=%s",
+            settings.active_provider_name,
+            getattr(response.usage, "total_tokens", "?"),
+            term_complete,
+        )
+
+        return {"content": content, "term_complete": term_complete}
 
     # ------------------------------------------------------------------ #
     # RAG
