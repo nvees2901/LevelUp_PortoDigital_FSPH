@@ -1,17 +1,16 @@
 import { useState, useEffect, useCallback } from 'react';
-import { MessageSquare, Search, Filter, User, Loader2, AlertTriangle } from 'lucide-react';
+import { MessageSquare, Search, Filter, Loader2, XCircle } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { getTerms } from '../../services/api';
-import type { TermoMock, TermSummary, TelaId } from '../../types';
+import type { TermSummary, TelaId } from '../../types';
 
 interface TermListProps {
-  termos: TermoMock[];
-  navegar: (tela: TelaId, termo?: TermoMock) => void;
+  navegar: (tela: TelaId, termo?: TermSummary) => void;
 }
 
 function getStatusColor(status: string): string {
-  if (status === 'Rascunho' || status === 'rascunho') return 'bg-slate-100 text-slate-700 border-slate-200';
-  if (status === 'Concluído (Pronto para Edital)' || status === 'validado') return 'bg-emerald-50 text-emerald-700 border-emerald-200';
+  if (status === 'rascunho') return 'bg-slate-100 text-slate-700 border-slate-200';
+  if (status === 'validado') return 'bg-emerald-50 text-emerald-700 border-emerald-200';
   if (status === 'reprovado') return 'bg-red-50 text-red-700 border-red-200';
   return 'bg-amber-50 text-amber-700 border-amber-200';
 }
@@ -26,28 +25,28 @@ function formatStatus(status: string): string {
   return map[status] || status;
 }
 
-export default function TermList({ termos: termosMock, navegar }: TermListProps) {
+export default function TermList({ navegar }: TermListProps) {
   const { usuario } = useAuth();
   const [busca, setBusca] = useState('');
-  const [apiTerms, setApiTerms] = useState<TermSummary[]>([]);
+  const [terms, setTerms] = useState<TermSummary[]>([]);
   const [loading, setLoading] = useState(true);
-  const [apiConnected, setApiConnected] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(0);
 
   const fetchTerms = useCallback(async () => {
     setLoading(true);
+    setError(null);
     try {
       const data = await getTerms({
         page,
         limit: 10,
         search: busca.trim() || undefined,
       });
-      setApiTerms(data.items);
+      setTerms(data.items);
       setTotalPages(data.pages);
-      setApiConnected(true);
     } catch {
-      setApiConnected(false);
+      setError('Não foi possível carregar os termos. Verifique se o backend está rodando.');
     } finally {
       setLoading(false);
     }
@@ -57,17 +56,6 @@ export default function TermList({ termos: termosMock, navegar }: TermListProps)
     const timeout = setTimeout(fetchTerms, busca ? 300 : 0);
     return () => clearTimeout(timeout);
   }, [fetchTerms, busca]);
-
-  // Dados a exibir: API ou mock
-  const termosFiltrados = apiConnected
-    ? [] // Usa apiTerms abaixo
-    : busca.trim()
-      ? termosMock.filter(
-          (t) =>
-            t.id.toLowerCase().includes(busca.toLowerCase()) ||
-            t.objeto.toLowerCase().includes(busca.toLowerCase())
-        )
-      : termosMock;
 
   return (
     <div className="bg-white rounded-xl border border-slate-200 shadow-sm flex flex-col h-full">
@@ -85,11 +73,10 @@ export default function TermList({ termos: termosMock, navegar }: TermListProps)
         </div>
       </div>
 
-      {/* Indicador API */}
-      {!loading && !apiConnected && (
-        <div className="mx-4 mt-3 bg-amber-50 border border-amber-200 text-amber-700 px-3 py-2 rounded-lg text-sm flex items-center gap-2">
-          <AlertTriangle size={14} />
-          Backend não disponível — exibindo dados locais.
+      {error && (
+        <div className="mx-4 mt-3 bg-red-50 border border-red-200 text-red-700 px-3 py-2 rounded-lg text-sm flex items-center gap-2">
+          <XCircle size={14} />
+          {error}
         </div>
       )}
 
@@ -127,95 +114,46 @@ export default function TermList({ termos: termosMock, navegar }: TermListProps)
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {apiConnected ? (
-                apiTerms.length > 0 ? apiTerms.map((t) => (
-                  <tr key={t.id} className="hover:bg-slate-50 transition-colors">
-                    <td className="p-4">
-                      <div className="font-bold text-[#0a2f64] mb-1 text-xs">{t.id.slice(0, 8)}...</div>
-                      <div className="text-sm text-slate-700 font-medium line-clamp-1">{t.title}</div>
-                      {t.original_filename && (
-                        <div className="text-xs text-slate-400 mt-1">{t.original_filename}</div>
-                      )}
-                    </td>
-                    <td className="p-4 text-sm text-slate-600 capitalize">{t.category.replace('_', ' ')}</td>
-                    <td className="p-4">
-                      <span className={`inline-flex items-center px-2.5 py-1 rounded border text-xs font-semibold ${getStatusColor(t.status)}`}>
-                        {formatStatus(t.status)}
-                      </span>
-                    </td>
-                    <td className="p-4 text-sm font-medium text-slate-700">
-                      {t.estimated_value ? `R$ ${Number(t.estimated_value).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}` : '-'}
-                    </td>
-                    <td className="p-4 text-right">
-                      <button
-                        onClick={() => navegar('detalhe', {
-                          id: t.id,
-                          objeto: t.title,
-                          autor: '-',
-                          data: new Date(t.created_at).toLocaleDateString('pt-BR'),
-                          status: t.status === 'rascunho' ? 'Rascunho' : formatStatus(t.status),
-                          valor: t.estimated_value ? `R$ ${Number(t.estimated_value).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}` : 'N/A',
-                          scoreIA: null,
-                        })}
-                        className="text-[#0a2f64] hover:text-[#134084] font-semibold text-sm px-3 py-1.5 hover:bg-blue-50 rounded transition-colors"
-                      >
-                        Ver Detalhes
-                      </button>
-                    </td>
-                  </tr>
-                )) : (
-                  <tr>
-                    <td colSpan={5} className="p-12 text-center text-slate-500">
-                      Nenhum termo encontrado.
-                    </td>
-                  </tr>
-                )
-              ) : (
-                termosFiltrados.map((t) => (
-                  <tr key={t.id} className="hover:bg-slate-50 transition-colors">
-                    <td className="p-4">
-                      <div className="font-bold text-[#0a2f64] mb-1">{t.id}</div>
-                      <div className="text-sm text-slate-700 font-medium line-clamp-1">{t.objeto}</div>
-                    </td>
-                    <td className="p-4 text-sm text-slate-600">
-                      <div className="flex items-center gap-1"><User size={12} /> {t.autor}</div>
-                      <div className="text-xs text-slate-400 mt-1">{t.data}</div>
-                    </td>
-                    <td className="p-4">
-                      <span className={`inline-flex items-center px-2.5 py-1 rounded border text-xs font-semibold ${getStatusColor(t.status)}`}>
-                        {t.status}
-                      </span>
-                    </td>
-                    <td className="p-4">
-                      {t.scoreIA ? (
-                        <div className="flex items-center gap-2">
-                          <div className={`text-sm font-bold ${t.scoreIA >= 90 ? 'text-emerald-600' : 'text-amber-500'}`}>{t.scoreIA}%</div>
-                          <div className="w-16 h-2 bg-slate-200 rounded-full overflow-hidden hidden sm:block">
-                            <div className={`h-full ${t.scoreIA >= 90 ? 'bg-emerald-500' : 'bg-amber-400'}`} style={{ width: `${t.scoreIA}%` }}></div>
-                          </div>
-                        </div>
-                      ) : (
-                        <span className="text-slate-400 text-sm font-medium">N/A</span>
-                      )}
-                    </td>
-                    <td className="p-4 text-right">
-                      <button
-                        onClick={() => navegar('detalhe', t)}
-                        className="text-[#0a2f64] hover:text-[#134084] font-semibold text-sm px-3 py-1.5 hover:bg-blue-50 rounded transition-colors"
-                      >
-                        Ver Detalhes
-                      </button>
-                    </td>
-                  </tr>
-                ))
+              {terms.length > 0 ? terms.map((t) => (
+                <tr key={t.id} className="hover:bg-slate-50 transition-colors">
+                  <td className="p-4">
+                    <div className="font-bold text-[#0a2f64] mb-1 text-xs">{t.id.slice(0, 8)}...</div>
+                    <div className="text-sm text-slate-700 font-medium line-clamp-1">{t.title}</div>
+                    {t.original_filename && (
+                      <div className="text-xs text-slate-400 mt-1">{t.original_filename}</div>
+                    )}
+                  </td>
+                  <td className="p-4 text-sm text-slate-600 capitalize">{t.category.replace('_', ' ')}</td>
+                  <td className="p-4">
+                    <span className={`inline-flex items-center px-2.5 py-1 rounded border text-xs font-semibold ${getStatusColor(t.status)}`}>
+                      {formatStatus(t.status)}
+                    </span>
+                  </td>
+                  <td className="p-4 text-sm font-medium text-slate-700">
+                    {t.estimated_value ? `R$ ${Number(t.estimated_value).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}` : '-'}
+                  </td>
+                  <td className="p-4 text-right">
+                    <button
+                      onClick={() => navegar('detalhe', t)}
+                      className="text-[#0a2f64] hover:text-[#134084] font-semibold text-sm px-3 py-1.5 hover:bg-blue-50 rounded transition-colors"
+                    >
+                      Ver Detalhes
+                    </button>
+                  </td>
+                </tr>
+              )) : (
+                <tr>
+                  <td colSpan={5} className="p-12 text-center text-slate-500">
+                    Nenhum termo encontrado.
+                  </td>
+                </tr>
               )}
             </tbody>
           </table>
         )}
       </div>
 
-      {/* Paginação — só quando API conectada */}
-      {apiConnected && totalPages > 1 && (
+      {totalPages > 1 && (
         <div className="p-4 border-t border-slate-200 flex justify-center gap-2">
           <button
             disabled={page <= 1}

@@ -22,17 +22,6 @@ export interface UsuarioAtual {
   nomeUsuarioLogado: string;
 }
 
-// Term types (mock frontend data)
-export interface TermoMock {
-  id: string;
-  objeto: string;
-  autor: string;
-  data: string;
-  status: string;
-  valor: string;
-  scoreIA: number | null;
-}
-
 // Backend API types (matching Pydantic schemas)
 export interface TermResponse {
   id: string;
@@ -126,7 +115,6 @@ export interface ChatResponse {
   session_id: string;
   mode: string;
   generated_term_id: string | null;
-  is_mock: boolean;
 }
 
 export interface ChatSessionResponse {
@@ -153,7 +141,6 @@ export interface DashboardStats {
 // Navigation
 export type TelaId = 'dashboard' | 'lista' | 'detalhe' | 'chat' | 'analise';
 
-// Mock chat message
 export interface MensagemChat {
   de: 'ia' | 'user';
   texto: string;

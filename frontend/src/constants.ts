@@ -1,7 +1,7 @@
 import {
   FileText, PieChart, Users, ShieldCheck, FileCheck,
 } from 'lucide-react';
-import type { Setor, FluxoConfig, TermoMock } from './types';
+import type { Setor, FluxoConfig } from './types';
 
 export const COLORS = {
   primary: '#0a2f64',
@@ -27,11 +27,3 @@ export const FLUXO: Record<string, FluxoConfig> = {
   'Retorno Contratos (Final)': { proximo: 'Concluído (Pronto para Edital)', ator: 'contratos', acao: 'Finalizar TR e Preparar Edital' },
   'Concluído (Pronto para Edital)': { proximo: null, ator: null, acao: null },
 };
-
-export const DADOS_INICIAIS: TermoMock[] = [
-  { id: 'TR-2023-001', objeto: 'Aquisição de Equipamentos de EPI', autor: 'Douglas (Almoxarifado)', data: '20/10/2023', status: 'Aguardando Jurídico', valor: 'R$ 150.000,00', scoreIA: 92 },
-  { id: 'TR-2023-002', objeto: 'Contratação de Empresa de Limpeza', autor: 'Maria (Manutenção)', data: '21/10/2023', status: 'Aguardando Diretoria', valor: 'R$ 850.000,00', scoreIA: 88 },
-  { id: 'TR-2023-003', objeto: 'Serviço de Manutenção de Ar Condicionado', autor: 'João (Infraestrutura)', data: '22/10/2023', status: 'Aguardando Contratos', valor: 'R$ 85.000,00', scoreIA: 95 },
-  { id: 'TR-2023-004', objeto: 'Compra de Insumos Laboratoriais', autor: 'Douglas (Almoxarifado)', data: '24/10/2023', status: 'Rascunho', valor: 'R$ 320.000,00', scoreIA: null },
-  { id: 'TR-2023-005', objeto: 'Renovação Licenças de Software', autor: 'TI', data: '15/10/2023', status: 'Retorno Contratos (Final)', valor: 'R$ 45.000,00', scoreIA: 100 },
-];

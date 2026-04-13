@@ -1,23 +1,31 @@
 import { useState, useEffect } from 'react';
 import {
   FileText, Clock, CheckCircle, ChevronRight,
-  AlertTriangle, User, PieChart, Loader2,
+  AlertTriangle, PieChart, Loader2, XCircle,
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { getDashboardStats } from '../../services/api';
-import { FLUXO, DADOS_INICIAIS } from '../../constants';
-import type { TermoMock, TermSummary, TelaId, DashboardStats } from '../../types';
+import type { TermSummary, TelaId, DashboardStats } from '../../types';
 
 interface DashboardViewProps {
-  termos: TermoMock[];
-  navegar: (tela: TelaId, termo?: TermoMock) => void;
+  navegar: (tela: TelaId, termo?: TermSummary) => void;
 }
 
-export default function DashboardView({ termos, navegar }: DashboardViewProps) {
+function formatStatus(status: string): string {
+  const map: Record<string, string> = {
+    rascunho: 'Rascunho',
+    em_analise: 'Em Análise',
+    validado: 'Validado',
+    reprovado: 'Reprovado',
+  };
+  return map[status] || status;
+}
+
+export default function DashboardView({ navegar }: DashboardViewProps) {
   const { usuario } = useAuth();
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [loading, setLoading] = useState(true);
-  const [apiConnected, setApiConnected] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -26,10 +34,10 @@ export default function DashboardView({ termos, navegar }: DashboardViewProps) {
         const data = await getDashboardStats();
         if (!cancelled) {
           setStats(data);
-          setApiConnected(true);
+          setError(null);
         }
       } catch {
-        if (!cancelled) setApiConnected(false);
+        if (!cancelled) setError('Não foi possível conectar ao backend.');
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -40,20 +48,14 @@ export default function DashboardView({ termos, navegar }: DashboardViewProps) {
 
   if (!usuario) return null;
 
-  // Dados derivados: API real ou fallback mock
-  const totalTRs = apiConnected && stats ? stats.total : termos.length;
-  const meusPendentes = termos.filter((t) => FLUXO[t.status]?.ator === usuario.id);
-  const totalValidados = apiConnected && stats
-    ? stats.validados
-    : termos.filter((t) => t.scoreIA !== null && t.scoreIA > 80).length;
+  const pendentes = stats?.recent_terms.filter((t) => t.status === 'em_analise' || t.status === 'rascunho') ?? [];
 
   return (
     <div className="space-y-6 max-w-6xl mx-auto">
-      {/* Indicador de conexão */}
-      {!loading && !apiConnected && (
-        <div className="bg-amber-50 border border-amber-200 text-amber-700 px-4 py-2 rounded-lg text-sm flex items-center gap-2">
-          <AlertTriangle size={16} />
-          Backend não disponível — exibindo dados locais.
+      {error && (
+        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm flex items-center gap-2">
+          <XCircle size={16} />
+          {error}
         </div>
       )}
 
@@ -63,7 +65,7 @@ export default function DashboardView({ termos, navegar }: DashboardViewProps) {
             <div>
               <p className="text-slate-500 text-sm font-medium">Total de TRs</p>
               <h3 className="text-3xl font-bold text-[#0a2f64]">
-                {loading ? <Loader2 size={24} className="animate-spin" /> : totalTRs}
+                {loading ? <Loader2 size={24} className="animate-spin" /> : (stats?.total ?? 0)}
               </h3>
             </div>
             <div className="p-3 bg-blue-50 text-[#0a2f64] rounded-lg"><FileText size={24} /></div>
@@ -73,8 +75,10 @@ export default function DashboardView({ termos, navegar }: DashboardViewProps) {
         <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm flex flex-col">
           <div className="flex justify-between items-start mb-4">
             <div>
-              <p className="text-slate-500 text-sm font-medium">Pendentes Comigo</p>
-              <h3 className="text-3xl font-bold text-amber-600">{meusPendentes.length}</h3>
+              <p className="text-slate-500 text-sm font-medium">Em Análise</p>
+              <h3 className="text-3xl font-bold text-amber-600">
+                {loading ? <Loader2 size={24} className="animate-spin" /> : (stats?.em_analise ?? 0)}
+              </h3>
             </div>
             <div className="p-3 bg-amber-50 text-amber-600 rounded-lg"><Clock size={24} /></div>
           </div>
@@ -85,7 +89,7 @@ export default function DashboardView({ termos, navegar }: DashboardViewProps) {
             <div>
               <p className="text-slate-500 text-sm font-medium">Validados (Lei 14.133)</p>
               <h3 className="text-3xl font-bold text-emerald-600">
-                {loading ? <Loader2 size={24} className="animate-spin" /> : totalValidados}
+                {loading ? <Loader2 size={24} className="animate-spin" /> : (stats?.validados ?? 0)}
               </h3>
             </div>
             <div className="p-3 bg-emerald-50 text-emerald-600 rounded-lg"><CheckCircle size={24} /></div>
@@ -102,8 +106,7 @@ export default function DashboardView({ termos, navegar }: DashboardViewProps) {
         </div>
       </div>
 
-      {/* Conformidade média — só se API disponível */}
-      {apiConnected && stats && stats.conformidade_media > 0 && (
+      {stats && stats.conformidade_media > 0 && (
         <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-5 flex items-center gap-4">
           <div className="p-3 bg-blue-50 text-[#0a2f64] rounded-lg"><PieChart size={24} /></div>
           <div>
@@ -123,19 +126,27 @@ export default function DashboardView({ termos, navegar }: DashboardViewProps) {
         <div className="p-5 border-b border-slate-100 bg-white flex justify-between items-center">
           <h3 className="font-bold text-[#0a2f64] flex items-center gap-2 text-lg">
             <AlertTriangle className="text-amber-500" size={22} />
-            Requer Sua Atenção ({usuario.nome})
+            Termos Recentes ({usuario.nome})
           </h3>
         </div>
         <div className="p-0 bg-slate-50">
-          {meusPendentes.length > 0 ? (
+          {loading ? (
+            <div className="p-12 text-center">
+              <Loader2 size={32} className="animate-spin text-[#0a2f64] mx-auto mb-3" />
+              <p className="text-slate-500">Carregando...</p>
+            </div>
+          ) : pendentes.length > 0 ? (
             <div className="divide-y divide-slate-200">
-              {meusPendentes.map((t) => (
+              {pendentes.map((t) => (
                 <div key={t.id} className="p-5 hover:bg-white flex flex-col md:flex-row md:items-center justify-between transition-colors gap-4">
                   <div>
-                    <p className="font-semibold text-slate-800 text-lg">{t.id} - {t.objeto}</p>
+                    <p className="font-semibold text-slate-800 text-lg">{t.id.slice(0, 8)}... — {t.title}</p>
                     <p className="text-sm text-slate-500 mt-1 flex items-center gap-2">
-                      <User size={14} /> Autor: {t.autor} <span className="text-slate-300">|</span>
-                      <PieChart size={14} /> Valor Est.: <span className="font-medium text-slate-700">{t.valor}</span>
+                      <PieChart size={14} /> Valor Est.: <span className="font-medium text-slate-700">
+                        {t.estimated_value ? `R$ ${Number(t.estimated_value).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}` : 'N/A'}
+                      </span>
+                      <span className="text-slate-300">|</span>
+                      Status: <span className="font-medium text-slate-700">{formatStatus(t.status)}</span>
                     </p>
                   </div>
                   <button
@@ -151,7 +162,7 @@ export default function DashboardView({ termos, navegar }: DashboardViewProps) {
             <div className="p-12 text-center text-slate-500">
               <CheckCircle size={48} className="mx-auto text-emerald-400 mb-4 opacity-50" />
               <p className="text-lg">Tudo certo por aqui!</p>
-              <p className="text-sm mt-1">Não há Termos de Referência aguardando a sua ação no momento.</p>
+              <p className="text-sm mt-1">Não há Termos de Referência pendentes no momento.</p>
             </div>
           )}
         </div>

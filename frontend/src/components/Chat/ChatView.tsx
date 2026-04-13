@@ -1,15 +1,13 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { Bot, Send, FileText, Loader2 } from 'lucide-react';
+import { Bot, Send, FileText, Loader2, XCircle } from 'lucide-react';
 import { streamChatMessage, sendChatMessage } from '../../services/api';
-import type { TermoMock, TelaId, MensagemChat } from '../../types';
+import type { TelaId, MensagemChat } from '../../types';
 
 interface ChatViewProps {
   navegar: (tela: TelaId) => void;
-  setTermos: React.Dispatch<React.SetStateAction<TermoMock[]>>;
-  termos: TermoMock[];
 }
 
-export default function ChatView({ navegar, setTermos, termos }: ChatViewProps) {
+export default function ChatView({ navegar }: ChatViewProps) {
   const [mensagens, setMensagens] = useState<MensagemChat[]>([
     { de: 'ia', texto: 'Olá! Sou o assistente de IA da FSPH treinado na Lei 14.133. Qual é o objeto da contratação que você deseja elaborar hoje?' },
   ]);
@@ -18,8 +16,7 @@ export default function ChatView({ navegar, setTermos, termos }: ChatViewProps) 
   const [streaming, setStreaming] = useState(false);
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [generatedTermId, setGeneratedTermId] = useState<string | null>(null);
-  const [apiConnected, setApiConnected] = useState<boolean | null>(null);
-  const [etapaMock, setEtapaMock] = useState(0);
+  const [error, setError] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const pendingTokensRef = useRef('');
   const flushTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -35,8 +32,8 @@ export default function ChatView({ navegar, setTermos, termos }: ChatViewProps) 
     const textoUsuario = input.trim();
     setInput('');
     setSending(true);
+    setError(null);
 
-    // Adiciona msg do user + msg vazia da IA para streaming
     setMensagens((prev) => [
       ...prev,
       { de: 'user', texto: textoUsuario },
@@ -53,7 +50,6 @@ export default function ChatView({ navegar, setTermos, termos }: ChatViewProps) 
         {
           onToken: (token) => {
             setStreaming(true);
-            // Acumula tokens e faz flush a cada 50ms para reduzir re-renders
             pendingTokensRef.current += token;
             if (!flushTimerRef.current) {
               flushTimerRef.current = setTimeout(() => {
@@ -73,7 +69,6 @@ export default function ChatView({ navegar, setTermos, termos }: ChatViewProps) 
             }
           },
           onDone: (meta) => {
-            // Flush tokens pendentes imediatamente
             if (flushTimerRef.current) {
               clearTimeout(flushTimerRef.current);
               flushTimerRef.current = null;
@@ -91,14 +86,12 @@ export default function ChatView({ navegar, setTermos, termos }: ChatViewProps) 
                 return updated;
               });
             }
-            setApiConnected(true);
             setSessionId(meta.session_id);
             if (meta.generated_term_id) {
               setGeneratedTermId(meta.generated_term_id);
             }
           },
           onError: () => {
-            // Remove a mensagem vazia da IA
             setMensagens((prev) => prev.slice(0, -1));
           },
         },
@@ -108,60 +101,29 @@ export default function ChatView({ navegar, setTermos, termos }: ChatViewProps) 
       setMensagens((prev) => prev.slice(0, -1));
 
       // Fallback: tenta request normal (sem streaming)
-      if (apiConnected === null) setApiConnected(false);
-
       try {
         const response = await sendChatMessage({
           message: textoUsuario,
           mode: 'gerar',
           session_id: sessionId || undefined,
         });
-        setApiConnected(true);
         setSessionId(response.session_id);
         setMensagens((prev) => [...prev, { de: 'ia', texto: response.message }]);
         if (response.generated_term_id) {
           setGeneratedTermId(response.generated_term_id);
         }
       } catch {
-        // Fallback final: modo mock offline
-        setMensagens((prev) => {
-          const userTurns = prev.filter((m) => m.de === 'user').length;
-          let respostaIA = '';
-          if (userTurns <= 1) {
-            respostaIA = `Entendido. Para "${textoUsuario}", qual o valor estimado da contratação e o prazo de vigência?`;
-          } else if (userTurns === 2) {
-            respostaIA = 'Perfeito. Com base nessas informações, estou estruturando as 7 seções obrigatórias conforme o Art. 6º, XXIII. Deseja incluir critérios específicos de sustentabilidade?';
-          } else {
-            respostaIA = 'Estrutura gerada com sucesso! O Termo de Referência foi criado em Rascunho e analisado contra a Lei 14.133.';
-          }
-          return [...prev, { de: 'ia', texto: respostaIA }];
-        });
-
-        setEtapaMock((prev) => {
-          if (prev >= 3) return prev;
-          if (prev === 2) {
-            const novoTR: TermoMock = {
-              id: `TR-2023-00${termos.length + 1}`,
-              objeto: mensagens[1]?.texto || 'Novo Objeto via IA',
-              autor: 'Área Demandante',
-              data: new Date().toLocaleDateString('pt-BR'),
-              status: 'Rascunho',
-              valor: 'A definir',
-              scoreIA: 98,
-            };
-            setTermos((p) => [novoTR, ...p]);
-            return 3;
-          }
-          return prev + 1;
-        });
+        setError('Não foi possível conectar ao assistente de IA. Verifique se o backend está rodando.');
+        // Remove a mensagem do user que ficou sem resposta
+        setMensagens((prev) => prev.slice(0, -1));
       }
     } finally {
       setSending(false);
       setStreaming(false);
     }
-  }, [input, sending, sessionId, apiConnected, etapaMock, termos, mensagens, setTermos]);
+  }, [input, sending, sessionId]);
 
-  const isComplete = generatedTermId !== null || etapaMock === 3;
+  const isComplete = generatedTermId !== null;
 
   return (
     <div className="max-w-4xl mx-auto h-[calc(100vh-140px)] flex flex-col bg-white rounded-xl shadow-sm border border-slate-200">
@@ -172,14 +134,20 @@ export default function ChatView({ navegar, setTermos, termos }: ChatViewProps) 
             <h3 className="font-bold text-lg">Assistente IA de Elaboração</h3>
             <p className="text-xs text-blue-200">
               Geração guiada baseada na Lei 14.133/2021
-              {apiConnected === false && ' (modo offline)'}
-              {apiConnected && sessionId && ` — Sessão ${sessionId.slice(0, 8)}...`}
+              {sessionId && ` — Sessão ${sessionId.slice(0, 8)}...`}
             </p>
           </div>
         </div>
       </div>
 
       <div className="flex-1 overflow-y-auto p-6 space-y-5 bg-slate-50">
+        {error && (
+          <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm flex items-center gap-2">
+            <XCircle size={16} />
+            {error}
+          </div>
+        )}
+
         {mensagens.map((m, i) => (
           <div key={i} className={`flex ${m.de === 'ia' ? 'justify-start' : 'justify-end'}`}>
             <div
