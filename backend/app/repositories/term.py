@@ -182,10 +182,28 @@ class TermRepository:
     # ------------------------------------------------------------------ #
 
     @staticmethod
+    async def list_pendentes_para(session: AsyncSession, setor: str) -> list[Term]:
+        """
+        Lista todos os TRs que estão aguardando ação do setor informado.
+
+        Filtra por `setor_atual == setor`, ordered by created_at desc.
+
+        Uso:
+            pendentes = await TermRepository.list_pendentes_para(db, "dirop")
+        """
+        result = await session.execute(
+            select(Term)
+            .where(Term.setor_atual == setor)
+            .order_by(Term.created_at.desc())
+        )
+        return list(result.scalars().all())
+
+    @staticmethod
     async def get_dashboard_stats(session: AsyncSession) -> dict:
         """
         Retorna estatísticas agregadas para o painel gerencial (HU-04):
-        - Contagem por status
+        - Total de TRs
+        - Contagem por status (8 estados do fluxo de tramitação)
         - 5 TRs mais recentes
         """
         # Contagem por status
@@ -203,12 +221,22 @@ class TermRepository:
         )
         recent = list(recent_result.scalars().all())
 
+        # Monta o dict por_status com todos os 8 estados (zero se não houver)
+        all_statuses = [
+            "Rascunho",
+            "Aguardando DIROP",
+            "Aguardando DIRAF",
+            "Aguardando DIGER",
+            "Instrução COLIC",
+            "Aguardando Jurídico",
+            "Aprovação DIRAF/DIGER",
+            "Homologado",
+        ]
+        por_status = {s: counts.get(s, 0) for s in all_statuses}
+
         return {
             "total": sum(counts.values()),
-            "validados": counts.get("validado", 0),
-            "em_analise": counts.get("em_analise", 0),
-            "rascunhos": counts.get("rascunho", 0),
-            "reprovados": counts.get("reprovado", 0),
+            "por_status": por_status,
             "recent_terms": recent,
         }
 
