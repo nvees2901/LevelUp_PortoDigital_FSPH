@@ -1,25 +1,28 @@
 services:
   frontend:
-    build: ./frontend
+    build:
+      context: ./frontend
+      args:
+        VITE_API_URL: http://localhost:8000/api/v1
+    mem_limit: 64m
     ports:
       - "3000:3000"
-    environment:
-      - NEXT_PUBLIC_API_URL=http://localhost:8000
     depends_on:
       - backend
 
   backend:
     build: ./backend
+    mem_limit: 2g
     ports:
       - "8000:8000"
     environment:
       - DATABASE_URL=postgresql+asyncpg://postgres:postgres@postgres:5432/fsph
       - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-http://ollama:11434/v1}
-      - OLLAMA_MODEL=${OLLAMA_MODEL:-qwen2.5:7b}
+      - OLLAMA_MODEL=${OLLAMA_MODEL:-qwen2.5:3b}
       - OPENROUTER_API_KEY=${OPENROUTER_API_KEY:-}
       - OPENAI_API_KEY=${OPENAI_API_KEY:-}
       - DOCS_PATH=/app/documents
-      - RAG_ENABLED=true
+      - RAG_ENABLED=${RAG_ENABLED:-false}
       - CHROMA_HOST=chromadb
       - CHROMA_PORT=8000
     volumes:
@@ -27,13 +30,12 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-      chromadb:
-        condition: service_started
       ollama:
         condition: service_started
 
   ollama:
     image: ollama/ollama:latest
+    mem_limit: 4g
     ports:
       - "11434:11434"
     volumes:
@@ -47,6 +49,8 @@ services:
 
   chromadb:
     image: chromadb/chroma:1.0.12
+    profiles: ["rag"]
+    mem_limit: 768m
     ports:
       - "8100:8000"
     volumes:
@@ -54,9 +58,16 @@ services:
     environment:
       - ANONYMIZED_TELEMETRY=False
       - CHROMA_SERVER_NOFILE=65535
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:8000/api/v2/heartbeat || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
 
   postgres:
     image: postgres:16-alpine
+    mem_limit: 384m
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres

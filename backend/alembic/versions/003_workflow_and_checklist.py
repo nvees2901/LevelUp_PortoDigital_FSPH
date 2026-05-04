@@ -59,6 +59,7 @@ def upgrade() -> None:
         "WHEN 'em_analise' THEN 'Aguardando DIROP' "
         "WHEN 'validado'   THEN 'Aguardando DIROP' "
         "WHEN 'reprovado'  THEN 'Rascunho' "
+        "ELSE 'Rascunho' "
         "END"
         ")::term_status"
     )
@@ -249,6 +250,7 @@ def downgrade() -> None:
         "WHEN 'Aguardando Jurídico'   THEN 'em_analise' "
         "WHEN 'Aprovação DIRAF/DIGER' THEN 'em_analise' "
         "WHEN 'Homologado'            THEN 'validado' "
+        "ELSE 'rascunho' "
         "END"
         ")::term_status"
     )

@@ -31,6 +31,8 @@ class WorkflowEventOut(BaseModel):
 
     id: str
     term_id: str
+    # Note: ator_nome has no ORM attribute — route must populate explicitly:
+    # WorkflowEventOut(**event.__dict__, ator_nome=event.ator.nome if event.ator else None)
     ator_nome: str | None = None
     de_setor: str | None = None
     para_setor: str | None = None

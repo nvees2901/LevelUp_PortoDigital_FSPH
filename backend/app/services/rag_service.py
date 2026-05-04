@@ -24,6 +24,20 @@ from app.utils.logging import get_logger
 if TYPE_CHECKING:
     import chromadb
 
+def _extract_pdf_text(file_path: Path) -> str:
+    """
+    Extrai texto de PDF com pypdf (rápido, baixo uso de memória).
+    Usado exclusivamente para indexação RAG — não precisa de layout de tabelas.
+    """
+    from pypdf import PdfReader
+    reader = PdfReader(str(file_path))
+    parts = []
+    for page in reader.pages:
+        text = page.extract_text()
+        if text:
+            parts.append(text)
+    return "\n".join(parts)
+
 logger = get_logger(__name__)
 
 CHUNK_SIZE = 1500      # ~375 tokens
@@ -134,9 +148,11 @@ class RagService:
                 logger.info("Indexando: %s", filename)
 
                 try:
-                    file_bytes = file_path.read_bytes()
-                    from app.services.document import DocumentService
-                    text = DocumentService.extract_text_sync(file_bytes, filename)
+                    if file_path.suffix.lower() == ".pdf":
+                        text = _extract_pdf_text(file_path)
+                    else:
+                        from app.services.document import DocumentService
+                        text = DocumentService.extract_text_sync(file_path.read_bytes(), filename)
 
                     if "14133" in filename or "Lei" in filename:
                         chunks = cls._chunk_text(text, filename)

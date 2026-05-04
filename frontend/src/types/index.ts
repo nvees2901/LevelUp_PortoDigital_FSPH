@@ -25,6 +25,21 @@ export interface UsuarioAtual {
   subunidade?: string;
 }
 
+// Auth — espelha os schemas Pydantic do backend
+export interface UserOut {
+  id: string;
+  matricula: string;
+  nome: string;
+  setor_id: SetorId;
+  subunidade: string | null;
+}
+
+export interface LoginResponse {
+  access_token: string;
+  token_type: string;
+  user: UserOut;
+}
+
 // Mock process type (matches original App.jsx)
 export interface TermoMock {
   id: string;

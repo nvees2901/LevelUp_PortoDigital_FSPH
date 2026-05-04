@@ -57,10 +57,12 @@ class Settings(BaseSettings):
     DOCS_PATH: str = str(_PROJECT_ROOT / "documents")  # pasta com Lei 14133 e TRs aprovados
 
     # ------------------------------------------------------------------ #
-    # Segurança
+    # Segurança / JWT
     # ------------------------------------------------------------------ #
     SECRET_KEY: str = "change-me-in-production-use-random-256-bit-string"
-    # Usado para assinar tokens JWT no futuro. DEVE ser alterado em produção.
+    # Em produção, gere com: python -c "import secrets; print(secrets.token_urlsafe(64))"
+    JWT_ALGORITHM: str = "HS256"
+    JWT_EXPIRE_MINUTES: int = 480  # 8 horas
 
     # ------------------------------------------------------------------ #
     # Aplicação

@@ -120,7 +120,7 @@ class TermUpdate(BaseModel):
             "Homologado",
         }
         if v not in valid:
-            raise ValueError(f"Status inválido. Use um dos valores do fluxo de tramitação.")
+            raise ValueError("Status inválido. Use um dos valores do fluxo de tramitação.")
         return v
 
 
