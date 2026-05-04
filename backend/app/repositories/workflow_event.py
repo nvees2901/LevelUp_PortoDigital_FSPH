@@ -9,6 +9,7 @@ import uuid
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.models.workflow_event import WorkflowEvent
 from app.utils.logging import get_logger
@@ -70,6 +71,7 @@ class WorkflowEventRepository:
         result = await session.execute(
             select(WorkflowEvent)
             .where(WorkflowEvent.term_id == term_id)
+            .options(selectinload(WorkflowEvent.ator))
             .order_by(WorkflowEvent.created_at.asc())
         )
         return list(result.scalars().all())

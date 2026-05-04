@@ -16,8 +16,11 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
+from app.core.security import CurrentUser
 from app.models.chat_session import ChatSession
+from app.repositories.checklist import ChecklistRepository
 from app.repositories.term import TermRepository
+from app.repositories.workflow_event import WorkflowEventRepository
 from app.schemas.chat import ChatRequest, ChatResponse, ChatSessionResponse, ChatMessage
 from app.services.ai_chat import AIChatService, AINotConfiguredError, AIProviderError
 from app.utils.exceptions import ChatSessionNotFoundError
@@ -31,7 +34,7 @@ DbDep = Annotated[AsyncSession, Depends(get_db)]
 
 
 @router.post("", response_model=ChatResponse)
-async def send_message(payload: ChatRequest, db: DbDep):
+async def send_message(payload: ChatRequest, db: DbDep, current_user: CurrentUser):
     """
     Envia uma mensagem ao assistente IA (HU-02).
 
@@ -71,12 +74,21 @@ async def send_message(payload: ChatRequest, db: DbDep):
         term = await TermRepository.create(db, {
             "title": f"TR gerado via Chat — {session.id}",
             "category": "outro",
-            "status": "rascunho",
+            "status": "Rascunho",
             "content": ai_result["content"],
+            "created_by_id": current_user.id,
         })
         session.generated_term_id = term.id
         generated_term_id = str(term.id)
         await db.flush()
+        await ChecklistRepository.create_for_term(db, str(term.id))
+        await WorkflowEventRepository.create(
+            db,
+            term_id=str(term.id),
+            ator_id=str(current_user.id),
+            acao="criar",
+            para_setor="demandante",
+        )
         logger.info("TR gerado via chat: term_id=%s session_id=%s", term.id, session.id)
 
     return ChatResponse(
@@ -88,7 +100,7 @@ async def send_message(payload: ChatRequest, db: DbDep):
 
 
 @router.post("/stream")
-async def stream_message(payload: ChatRequest, db: DbDep):
+async def stream_message(payload: ChatRequest, db: DbDep, current_user: CurrentUser):
     """
     Envia uma mensagem com resposta streaming via SSE.
 
@@ -136,12 +148,21 @@ async def stream_message(payload: ChatRequest, db: DbDep):
             term = await TermRepository.create(db, {
                 "title": f"TR gerado via Chat — {session.id}",
                 "category": "outro",
-                "status": "rascunho",
+                "status": "Rascunho",
                 "content": full_content,
+                "created_by_id": current_user.id,
             })
             session.generated_term_id = term.id
             generated_term_id = str(term.id)
             await db.flush()
+            await ChecklistRepository.create_for_term(db, str(term.id))
+            await WorkflowEventRepository.create(
+                db,
+                term_id=str(term.id),
+                ator_id=str(current_user.id),
+                acao="criar",
+                para_setor="demandante",
+            )
             logger.info("TR gerado via stream: term_id=%s session_id=%s", term.id, session.id)
 
         # Evento final com metadados
@@ -159,7 +180,7 @@ async def stream_message(payload: ChatRequest, db: DbDep):
 
 
 @router.get("/{session_id}", response_model=ChatSessionResponse)
-async def get_session(session_id: str, db: DbDep):
+async def get_session(session_id: str, db: DbDep, current_user: CurrentUser):
     """Recupera o histórico completo de uma sessão de chat."""
     session = await _find_session(db, session_id)
     return ChatSessionResponse(
@@ -178,7 +199,7 @@ async def get_session(session_id: str, db: DbDep):
 
 
 @router.delete("/{session_id}", status_code=204)
-async def delete_session(session_id: str, db: DbDep):
+async def delete_session(session_id: str, db: DbDep, current_user: CurrentUser):
     """Encerra e remove uma sessão de chat."""
     session = await _find_session(db, session_id)
     await db.delete(session)

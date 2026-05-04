@@ -13,6 +13,8 @@ Alternativa seria injetar a sessão no construtor, mas métodos de classe
 são mais simples e diretos per esta escala de projeto.
 """
 
+from __future__ import annotations
+
 import unicodedata
 from decimal import Decimal
 
