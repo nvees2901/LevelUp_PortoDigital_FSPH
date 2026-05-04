@@ -106,12 +106,15 @@ async def avancar(
     term.setor_atual = proximo_setor if proximo_setor is not None else "diraf"
 
     # 8. Registra evento no histórico
+    # Nota: para_setor usa proximo_setor (pode ser None para Homologado),
+    # não term.setor_atual (que tem fallback "diraf"). O evento deve refletir
+    # fielmente a intenção da transição — para Homologado, para_setor=None.
     await WorkflowEventRepository.create(
         db,
         term_id=str(term.id),
         ator_id=str(current_user.id),
         de_setor=de_setor_old,
-        para_setor=term.setor_atual,
+        para_setor=proximo_setor,
         acao="avancar",
         observacao=observacao,
     )
