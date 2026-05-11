@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import { Bot, Send, FileText, Paperclip } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { COLORS } from '../../constants';
@@ -9,9 +9,13 @@ interface ChatViewProps {
   navegar: (tela: TelaId) => void;
 }
 
+function escapeHtml(s: string) {
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
 function renderTexto(txt: string) {
   return txt.split('\n').map((line, i) => {
-    const formatted = line.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+    const formatted = escapeHtml(line).replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
     return <p key={i} className={line === '' ? 'h-1' : ''} dangerouslySetInnerHTML={{ __html: formatted }} />;
   });
 }
@@ -29,7 +33,7 @@ export default function ChatView({ navegar }: ChatViewProps) {
     };
   }
 
-  const [msgs, setMsgs] = useState<MensagemChat[]>([buildWelcome()]);
+  const [msgs, setMsgs] = useState<MensagemChat[]>(() => [buildWelcome()]);
   const [input, setInput] = useState('');
   const [analisando, setAnalisando] = useState(false);
   const [sessionId, setSessionId] = useState<string | null>(null);
@@ -38,6 +42,8 @@ export default function ChatView({ navegar }: ChatViewProps) {
 
   const [sessions, setSessions] = useState<ChatSessionSummary[]>([]);
   const [sessionsLoading, setSessionsLoading] = useState(false);
+  const [sessionsError, setSessionsError] = useState(false);
+  const [loadingSession, setLoadingSession] = useState(false);
   const [attachedTermId, setAttachedTermId] = useState<string | null>(null);
   const [attachedTermTitle, setAttachedTermTitle] = useState<string | null>(null);
   const [uploadingFile, setUploadingFile] = useState(false);
@@ -50,18 +56,23 @@ export default function ChatView({ navegar }: ChatViewProps) {
   const addMsg = (de: 'ia' | 'user', texto: string, extra: Partial<MensagemChat> = {}) =>
     setMsgs(prev => [...prev, { de, texto, ...extra }]);
 
-  const loadSessions = async (m: ChatMode) => {
+  const loadSessions = useCallback(async (m: ChatMode) => {
     setSessionsLoading(true);
+    setSessionsError(false);
     try {
       const res = await listChatSessions(m);
       setSessions(res.items);
-    } catch { /* silent */ }
-    finally { setSessionsLoading(false); }
-  };
+    } catch {
+      setSessionsError(true);
+    } finally {
+      setSessionsLoading(false);
+    }
+  }, []);
 
-  useEffect(() => { loadSessions(mode); }, [mode]);
+  useEffect(() => { loadSessions(mode); }, [mode, loadSessions]);
 
   const loadSession = async (sid: string) => {
+    setLoadingSession(true);
     try {
       const res = await getChatSession(sid);
       setSessionId(res.id);
@@ -71,8 +82,10 @@ export default function ChatView({ navegar }: ChatViewProps) {
       );
       setAttachedTermId(null);
       setAttachedTermTitle(null);
-    } catch (err) {
+    } catch {
       addMsg('ia', 'Nao foi possivel carregar a sessao.');
+    } finally {
+      setLoadingSession(false);
     }
   };
 
@@ -167,11 +180,13 @@ export default function ChatView({ navegar }: ChatViewProps) {
         <div className="flex-1 overflow-y-auto p-2 space-y-1">
           {sessionsLoading ? (
             <div className="text-xs text-slate-400 text-center py-4">Carregando...</div>
+          ) : sessionsError ? (
+            <div className="text-xs text-red-400 text-center py-4">Erro ao carregar conversas.</div>
           ) : sessions.length === 0 ? (
             <div className="text-xs text-slate-400 text-center py-4">Nenhuma conversa anterior.</div>
           ) : sessions.map(s => (
-            <button key={s.id} onClick={() => loadSession(s.id)}
-              className={`w-full text-left px-3 py-2 rounded-lg text-xs transition hover:bg-slate-100 ${s.id === sessionId ? 'bg-blue-50 border border-blue-200 text-[#0a2f64] font-semibold' : 'text-slate-600'}`}>
+            <button key={s.id} onClick={() => loadSession(s.id)} disabled={loadingSession}
+              className={`w-full text-left px-3 py-2 rounded-lg text-xs transition hover:bg-slate-100 disabled:opacity-60 ${s.id === sessionId ? 'bg-blue-50 border border-blue-200 text-[#0a2f64] font-semibold' : 'text-slate-600'}`}>
               <p className="truncate font-medium">{s.title ?? `Sessao ${s.id.slice(0, 8)}`}</p>
               <p className="text-slate-400 text-[10px]">{s.message_count} msg • {s.updated_at.slice(0, 10)}</p>
             </button>
@@ -295,7 +310,7 @@ export default function ChatView({ navegar }: ChatViewProps) {
               </button>
             )}
             <button type="submit"
-              disabled={!input.trim() || analisando}
+              disabled={!input.trim() || analisando || uploadingFile}
               style={{ backgroundColor: COLORS.primary }}
               className="p-2.5 text-white rounded-lg hover:bg-[#134084] disabled:opacity-40 disabled:cursor-not-allowed transition shadow-sm shrink-0">
               <Send size={17} />
