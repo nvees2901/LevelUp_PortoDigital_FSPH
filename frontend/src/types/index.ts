@@ -42,7 +42,19 @@ export interface LoginResponse {
   user: UserOut;
 }
 
+// COLIC workflow status
+export type TermStatus =
+  | 'Rascunho'
+  | 'Aguardando DIROP'
+  | 'Aguardando DIRAF'
+  | 'Aguardando DIGER'
+  | 'Instrução COLIC'
+  | 'Aguardando Jurídico'
+  | 'Aprovação DIRAF/DIGER'
+  | 'Homologado';
+
 // Mock process type (matches original App.jsx)
+/** @deprecated Will be removed after all components migrate to TermResponse */
 export interface TermoMock {
   id: string;
   objeto: string;
@@ -62,7 +74,8 @@ export interface TermResponse {
   id: string;
   title: string;
   category: 'capacitacao' | 'aquisicao' | 'servico_tecnico' | 'outro';
-  status: 'rascunho' | 'em_analise' | 'validado' | 'reprovado';
+  status: TermStatus;
+  setor_atual: SetorId | null;
   content: string | null;
   sections: Record<string, unknown> | null;
   variable_fields: string[] | null;
@@ -76,7 +89,8 @@ export interface TermSummary {
   id: string;
   title: string;
   category: string;
-  status: string;
+  status: TermStatus;
+  setor_atual: SetorId | null;
   estimated_value: number | null;
   original_filename: string | null;
   created_at: string;
@@ -145,6 +159,7 @@ export interface ChatRequest {
   message: string;
   mode: ChatMode;
   session_id?: string;
+  term_id?: string;
 }
 
 export interface ChatResponse {
@@ -164,13 +179,24 @@ export interface ChatSessionResponse {
   updated_at: string;
 }
 
+export interface ChatSessionSummary {
+  id: string;
+  mode: ChatMode;
+  title: string | null;
+  message_count: number;
+  generated_term_id: string | null;
+  term_id: string | null;
+  updated_at: string;
+}
+
+export interface ChatSessionListResponse {
+  items: ChatSessionSummary[];
+}
+
 // Dashboard types (matches GET /api/v1/dashboard/stats)
 export interface DashboardStats {
   total: number;
-  validados: number;
-  em_analise: number;
-  rascunhos: number;
-  reprovados: number;
+  por_status: Record<string, number>;
   conformidade_media: number;
   recent_terms: TermSummary[];
 }

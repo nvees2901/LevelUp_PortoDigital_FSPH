@@ -4,9 +4,11 @@ import type {
   TermCreate,
   TermUpdate,
   AnalysisResponse,
+  ChatMode,
   ChatRequest,
   ChatResponse,
   ChatSessionResponse,
+  ChatSessionListResponse,
   DashboardStats,
   ContextDocument,
   ContextDocumentList,
@@ -234,4 +236,11 @@ export async function uploadContextDocument(file: File): Promise<ContextDocument
 
 export async function deleteContextDocument(id: string): Promise<void> {
   return request<void>(`/admin/context-documents/${id}`, { method: 'DELETE' });
+}
+
+// --- Chat Sessions ---
+
+export async function listChatSessions(mode?: ChatMode): Promise<ChatSessionListResponse> {
+  const qs = mode ? `?mode=${encodeURIComponent(mode)}` : '';
+  return request<ChatSessionListResponse>(`/chat/sessions${qs}`);
 }
