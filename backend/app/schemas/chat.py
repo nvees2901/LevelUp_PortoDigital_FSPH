@@ -100,6 +100,15 @@ class ChatResponse(BaseModel):
     )
 
 
+class ChatFinalizeResponse(BaseModel):
+    """
+    Resposta de POST /api/v1/chat/{session_id}/finalize.
+    Retorna o UUID do TR criado (ou já existente) a partir da sessão.
+    """
+
+    term_id: str = Field(description="UUID do TR gerado a partir da sessão de chat")
+
+
 class ChatSessionResponse(BaseModel):
     """
     Resposta de GET /api/v1/chat/{session_id}.

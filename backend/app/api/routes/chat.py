@@ -21,7 +21,7 @@ from app.models.chat_session import ChatSession
 from app.repositories.checklist import ChecklistRepository
 from app.repositories.term import TermRepository
 from app.repositories.workflow_event import WorkflowEventRepository
-from app.schemas.chat import ChatRequest, ChatResponse, ChatSessionResponse, ChatMessage
+from app.schemas.chat import ChatRequest, ChatFinalizeResponse, ChatResponse, ChatSessionResponse, ChatMessage
 from app.services.ai_chat import AIChatService, AINotConfiguredError, AIProviderError
 from app.utils.exceptions import ChatSessionNotFoundError
 from app.utils.logging import get_logger
@@ -71,25 +71,8 @@ async def send_message(payload: ChatRequest, db: DbDep, current_user: CurrentUse
     # --- Se TR foi gerado, salva-o ---
     generated_term_id = None
     if ai_result.get("term_complete") and session.mode == "gerar":
-        term = await TermRepository.create(db, {
-            "title": f"TR gerado via Chat — {session.id}",
-            "category": "outro",
-            "status": "Rascunho",
-            "content": ai_result["content"],
-            "created_by_id": current_user.id,
-        })
-        session.generated_term_id = term.id
-        generated_term_id = str(term.id)
-        await db.flush()
-        await ChecklistRepository.create_for_term(db, str(term.id))
-        await WorkflowEventRepository.create(
-            db,
-            term_id=str(term.id),
-            ator_id=str(current_user.id),
-            acao="criar",
-            para_setor="demandante",
-        )
-        logger.info("TR gerado via chat: term_id=%s session_id=%s", term.id, session.id)
+        generated_term_id = await _persist_term_from_session(db, session, current_user)
+        logger.info("TR gerado via chat: term_id=%s session_id=%s", generated_term_id, session.id)
 
     return ChatResponse(
         message=ai_result["content"],
@@ -145,25 +128,8 @@ async def stream_message(payload: ChatRequest, db: DbDep, current_user: CurrentU
         # Salva TR se gerado
         generated_term_id = None
         if term_complete and session.mode == "gerar":
-            term = await TermRepository.create(db, {
-                "title": f"TR gerado via Chat — {session.id}",
-                "category": "outro",
-                "status": "Rascunho",
-                "content": full_content,
-                "created_by_id": current_user.id,
-            })
-            session.generated_term_id = term.id
-            generated_term_id = str(term.id)
-            await db.flush()
-            await ChecklistRepository.create_for_term(db, str(term.id))
-            await WorkflowEventRepository.create(
-                db,
-                term_id=str(term.id),
-                ator_id=str(current_user.id),
-                acao="criar",
-                para_setor="demandante",
-            )
-            logger.info("TR gerado via stream: term_id=%s session_id=%s", term.id, session.id)
+            generated_term_id = await _persist_term_from_session(db, session, current_user)
+            logger.info("TR gerado via stream: term_id=%s session_id=%s", generated_term_id, session.id)
 
         # Evento final com metadados
         yield f"data: {json.dumps({'done': True, 'session_id': str(session.id), 'mode': session.mode, 'generated_term_id': generated_term_id})}\n\n"
@@ -177,6 +143,27 @@ async def stream_message(payload: ChatRequest, db: DbDep, current_user: CurrentU
             "X-Accel-Buffering": "no",
         },
     )
+
+
+@router.post("/{session_id}/finalize", response_model=ChatFinalizeResponse)
+async def finalize_session(session_id: str, db: DbDep, current_user: CurrentUser):
+    """
+    Finaliza explicitamente uma sessão de chat, criando o TR a partir do último
+    conteúdo gerado pelo assistente (HU-02).
+
+    Idempotente: se o TR já foi criado anteriormente, retorna o mesmo term_id
+    sem criar duplicatas.
+    """
+    session = await _find_session(db, session_id)
+
+    # --- Idempotência: TR já existe ---
+    if session.generated_term_id:
+        return ChatFinalizeResponse(term_id=str(session.generated_term_id))
+
+    # --- Cria o TR a partir do conteúdo da sessão ---
+    term_id = await _persist_term_from_session(db, session, current_user)
+    logger.info("Sessão finalizada manualmente: term_id=%s session_id=%s", term_id, session_id)
+    return ChatFinalizeResponse(term_id=term_id)
 
 
 @router.get("/{session_id}", response_model=ChatSessionResponse)
@@ -209,6 +196,46 @@ async def delete_session(session_id: str, db: DbDep, current_user: CurrentUser):
 # ------------------------------------------------------------------ #
 # Utilitários internos
 # ------------------------------------------------------------------ #
+
+async def _persist_term_from_session(
+    db: AsyncSession,
+    session: ChatSession,
+    current_user,
+) -> str:
+    """
+    Cria um TR a partir do conteúdo da sessão de chat.
+
+    Extrai o último conteúdo do assistente, cria Term + Checklist + WorkflowEvent,
+    atualiza session.generated_term_id e retorna str(term.id).
+
+    Não verifica idempotência — o chamador deve garantir que o TR ainda não existe.
+    """
+    # Extrai o último conteúdo do assistente
+    last_assistant_content = ""
+    for msg in reversed(session.messages):
+        if msg.get("role") == "assistant":
+            last_assistant_content = msg.get("content", "")
+            break
+
+    term = await TermRepository.create(db, {
+        "title": f"TR gerado via Chat — {session.id}",
+        "category": "outro",
+        "status": "Rascunho",
+        "content": last_assistant_content,
+        "created_by_id": current_user.id,
+    })
+    session.generated_term_id = term.id
+    await db.flush()
+    await ChecklistRepository.create_for_term(db, str(term.id))
+    await WorkflowEventRepository.create(
+        db,
+        term_id=str(term.id),
+        ator_id=str(current_user.id),
+        acao="criar",
+        para_setor="demandante",
+    )
+    return str(term.id)
+
 
 async def _get_or_create_session(
     db: AsyncSession,
