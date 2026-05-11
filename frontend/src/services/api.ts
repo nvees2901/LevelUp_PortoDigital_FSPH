@@ -12,6 +12,8 @@ import type {
   DashboardStats,
   ContextDocument,
   ContextDocumentList,
+  TermChecklistOut,
+  WorkflowEventOut,
 } from '../types';
 
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000/api/v1';
@@ -97,9 +99,31 @@ export async function getPendentes(): Promise<TermResponse[]> {
 
 export async function exportTermPdf(id: string): Promise<Blob> {
   const url = `${API_BASE}/terms/${id}/export/pdf`;
-  const response = await fetch(url);
+  const response = await fetch(url, { headers: getAuthHeader() });
   if (!response.ok) throw new ApiError(response.status, 'Erro ao exportar PDF');
   return response.blob();
+}
+
+export async function getChecklist(termId: string): Promise<TermChecklistOut> {
+  return request<TermChecklistOut>(`/terms/${termId}/checklist`);
+}
+
+export async function getHistorico(termId: string): Promise<WorkflowEventOut[]> {
+  return request<WorkflowEventOut[]>(`/terms/${termId}/historico`);
+}
+
+export async function avancarTermo(termId: string, observacao?: string): Promise<TermResponse> {
+  return request<TermResponse>(`/terms/${termId}/avancar`, {
+    method: 'POST',
+    body: JSON.stringify({ observacao: observacao ?? null }),
+  });
+}
+
+export async function devolverTermo(termId: string, observacao: string): Promise<TermResponse> {
+  return request<TermResponse>(`/terms/${termId}/devolver`, {
+    method: 'POST',
+    body: JSON.stringify({ observacao }),
+  });
 }
 
 // --- Upload ---

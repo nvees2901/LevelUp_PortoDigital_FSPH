@@ -221,6 +221,28 @@ export interface ContextDocumentList {
   total: number;
 }
 
+export interface TermChecklistOut {
+  term_id: string;
+  dfd: boolean;
+  etp: boolean;
+  tr: boolean;
+  dotacao: boolean;
+  auth_dirop: boolean;
+  auth_diraf: boolean;
+  auth_diger: boolean;
+}
+
+export interface WorkflowEventOut {
+  id: string;
+  term_id: string;
+  ator_nome: string | null;
+  de_setor: string | null;
+  para_setor: string | null;
+  acao: string;
+  observacao: string | null;
+  created_at: string;
+}
+
 // Navigation
 export type TelaId = 'dashboard' | 'lista' | 'detalhe' | 'chat' | 'base' | 'analise' | 'admin';
 
