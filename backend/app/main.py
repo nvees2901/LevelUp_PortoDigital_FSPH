@@ -21,7 +21,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api.routes import analysis, auth, chat, dashboard, terms, upload, workflow
+from app.api.routes import admin, analysis, auth, chat, dashboard, terms, upload, workflow
 from app.core.config import settings
 from app.core.database import engine
 from app.utils.exceptions import register_exception_handlers
@@ -171,6 +171,7 @@ app.include_router(upload.router,    prefix=API_V1_PREFIX)
 app.include_router(analysis.router,  prefix=API_V1_PREFIX)
 app.include_router(chat.router,      prefix=API_V1_PREFIX)
 app.include_router(dashboard.router, prefix=API_V1_PREFIX)
+app.include_router(admin.router,     prefix=API_V1_PREFIX)  # POST/GET/DELETE /admin/context-documents
 
 
 # ------------------------------------------------------------------ #

@@ -13,6 +13,7 @@ Coleções ChromaDB:
   - "termos_aprovados"  → TRs pré-aprovados da FSPH (exemplos de referência)
 """
 
+import asyncio
 import re
 import threading
 from pathlib import Path
@@ -115,6 +116,10 @@ class RagService:
                 name="termos_aprovados",
                 metadata={"description": "TRs pré-aprovados da FSPH"},
             )
+            extra_collection = cls._client.get_or_create_collection(
+                name="context_extra",
+                metadata={"description": "Documentos de contexto adicionais — carregados pelo admin"},
+            )
 
             # Verifica se já foi indexado
             if lei_collection.count() > 0 and tr_collection.count() > 0:
@@ -211,12 +216,15 @@ class RagService:
 
         law_context = cls.search_law(query, top_k=4)
         tr_context = cls.search_approved_terms(query, top_k=2)
+        extra_context = cls._search("context_extra", query, top_k=3, label="Contexto Adicional")
 
         parts = []
         if law_context:
             parts.append(law_context)
         if tr_context:
             parts.append(tr_context)
+        if extra_context:
+            parts.append(extra_context)
 
         return "\n\n".join(parts)
 
@@ -324,3 +332,61 @@ class RagService:
                 metadatas=metadatas,
             )
             logger.debug("Lote indexado: %d/%d chunks", i + len(batch), len(chunks))
+
+    @classmethod
+    def _remove_chunks_from_collection(cls, collection, filename: str) -> None:
+        """Remove todos os chunks de um arquivo específico de uma coleção ChromaDB."""
+        try:
+            results = collection.get(where={"source": filename})
+            if results and results.get("ids"):
+                collection.delete(ids=results["ids"])
+                logger.info("Removidos %d chunks de '%s'", len(results["ids"]), filename)
+        except Exception as e:
+            logger.warning("Erro ao remover chunks de '%s': %s", filename, e)
+
+    @classmethod
+    def remove_document_chunks(cls, filename: str) -> None:
+        """Remove chunks de um documento da coleção context_extra."""
+        if cls._client is None:
+            logger.warning("ChromaDB não inicializado — não foi possível remover chunks de '%s'", filename)
+            return
+        try:
+            extra_collection = cls._client.get_collection("context_extra")
+            cls._remove_chunks_from_collection(extra_collection, filename)
+        except Exception as e:
+            logger.warning("Erro ao acessar coleção context_extra: %s", e)
+
+    @classmethod
+    async def index_uploaded_document(cls, storage_path: str, filename: str) -> int:
+        """Indexa um documento de contexto carregado pelo admin na coleção context_extra."""
+        if cls._client is None:
+            await asyncio.to_thread(cls.setup)
+
+        # Garantir que a coleção existe
+        extra_collection = await asyncio.to_thread(
+            lambda: cls._client.get_or_create_collection(
+                name="context_extra",
+                metadata={"description": "Documentos de contexto adicionais — carregados pelo admin"},
+            )
+        )
+
+        file_path = Path(storage_path)
+
+        if file_path.suffix.lower() == ".pdf":
+            text = await asyncio.to_thread(_extract_pdf_text, file_path)
+        else:
+            file_bytes = file_path.read_bytes()
+            from app.services.document import DocumentService
+            text = await asyncio.to_thread(
+                DocumentService.extract_text_sync, file_bytes, filename
+            )
+
+        chunks = cls._chunk_text(text, filename)
+        if not chunks:
+            return 0
+
+        # Remove chunks antigos deste arquivo (evita duplicatas em re-indexação)
+        await asyncio.to_thread(cls._remove_chunks_from_collection, extra_collection, filename)
+
+        await asyncio.to_thread(cls._add_to_collection, extra_collection, chunks)
+        return len(chunks)
