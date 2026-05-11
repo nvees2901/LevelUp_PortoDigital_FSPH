@@ -53,6 +53,13 @@ class User(Base):
         default=True,
         server_default=text("true"),
     )
+    is_admin: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=False,
+        server_default=text("false"),
+        comment="Papel administrativo — pode gerenciar documentos de contexto da IA",
+    )
     created_at: Mapped[str] = mapped_column(
         String,
         server_default=func.now(),

@@ -13,9 +13,10 @@ Por que importar aqui?
 
 from app.models.analysis import Analysis  # noqa: F401
 from app.models.chat_session import ChatSession  # noqa: F401
+from app.models.context_document import ContextDocument  # noqa: F401
 from app.models.term import Term  # noqa: F401
 from app.models.term_checklist import TermChecklist  # noqa: F401
 from app.models.user import User  # noqa: F401
 from app.models.workflow_event import WorkflowEvent  # noqa: F401
 
-__all__ = ["Term", "Analysis", "ChatSession", "User", "TermChecklist", "WorkflowEvent"]
+__all__ = ["Term", "Analysis", "ChatSession", "ContextDocument", "User", "TermChecklist", "WorkflowEvent"]

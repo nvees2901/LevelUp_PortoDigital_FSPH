@@ -33,6 +33,8 @@ SEED_USERS = [
     {"matricula": "DIGER-001", "nome": "Gisele Prado", "setor_id": "diger",    "subunidade": None},
     {"matricula": "COLIC-001", "nome": "Hugo Ferraz",  "setor_id": "colic",    "subunidade": None},
     {"matricula": "JUR-001",   "nome": "Isabela Ramos","setor_id": "juridico", "subunidade": None},
+    # Administrador do sistema — acesso ao gerenciamento de documentos de contexto da IA
+    {"matricula": "ADMIN-001", "nome": "Administrador FSPH", "setor_id": "colic", "subunidade": None, "is_admin": True},
 ]
 
 

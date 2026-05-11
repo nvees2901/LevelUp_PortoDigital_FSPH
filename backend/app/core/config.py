@@ -91,6 +91,12 @@ class Settings(BaseSettings):
     UPLOAD_DIR: str = "uploads"  # pasta onde os arquivos ficam armazenados no servidor
 
     # ------------------------------------------------------------------ #
+    # Documentos de contexto da IA (gerenciados pelo administrador)
+    # ------------------------------------------------------------------ #
+    CONTEXT_DOCS_DIR: str = "./context_documents"   # pasta de armazenamento dos docs de contexto
+    CONTEXT_DOC_MAX_SIZE_MB: int = 20               # limite por arquivo de contexto
+
+    # ------------------------------------------------------------------ #
     # Propriedade calculada — não vem do .env
     # ------------------------------------------------------------------ #
     @property
