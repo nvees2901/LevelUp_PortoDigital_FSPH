@@ -12,13 +12,14 @@ import json
 import uuid
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
 from app.core.security import CurrentUser
 from app.models.chat_session import ChatSession
+from app.models.user import User
 from app.repositories.checklist import ChecklistRepository
 from app.repositories.term import TermRepository
 from app.repositories.workflow_event import WorkflowEventRepository
@@ -157,6 +158,13 @@ async def finalize_session(session_id: str, db: DbDep, current_user: CurrentUser
     """
     session = await _find_session(db, session_id)
 
+    # --- Valida modo da sessão ---
+    if session.mode != "gerar":
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Apenas sessões no modo 'gerar' podem ser finalizadas como TR.",
+        )
+
     # --- Idempotência: TR já existe ---
     if session.generated_term_id:
         return ChatFinalizeResponse(term_id=str(session.generated_term_id))
@@ -201,7 +209,7 @@ async def delete_session(session_id: str, db: DbDep, current_user: CurrentUser):
 async def _persist_term_from_session(
     db: AsyncSession,
     session: ChatSession,
-    current_user,
+    current_user: User,
 ) -> str:
     """
     Cria um TR a partir do conteúdo da sessão de chat.
@@ -217,6 +225,12 @@ async def _persist_term_from_session(
         if msg.get("role") == "assistant":
             last_assistant_content = msg.get("content", "")
             break
+
+    if not last_assistant_content:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="A sessão não contém conteúdo gerado pelo assistente.",
+        )
 
     term = await TermRepository.create(db, {
         "title": f"TR gerado via Chat — {session.id}",
