@@ -10,7 +10,7 @@ import TermDetail from './components/Terms/TermDetail';
 import ChatView from './components/Chat/ChatView';
 import UploadView from './components/Upload/UploadView';
 import ContextDocumentsView from './components/Admin/ContextDocumentsView';
-import type { TermoMock, TelaId } from './types';
+import type { TelaId } from './types';
 
 class ErrorBoundary extends Component<{ children: ReactNode }, { error: Error | null }> {
   state = { error: null as Error | null };
@@ -46,11 +46,11 @@ class ErrorBoundary extends Component<{ children: ReactNode }, { error: Error | 
 function AppContent() {
   const { usuario } = useAuth();
   const [telaAtual, setTelaAtual] = useState<TelaId>('dashboard');
-  const [termoSelecionado, setTermoSelecionado] = useState<TermoMock | string | null>(null);
+  const [termoSelecionadoId, setTermoSelecionadoId] = useState<string | null>(null);
 
-  const navegar = useCallback((tela: TelaId, termo?: TermoMock | string) => {
+  const navegar = useCallback((tela: TelaId, termoId?: string) => {
     setTelaAtual(tela);
-    if (termo !== undefined) setTermoSelecionado(termo);
+    if (termoId) setTermoSelecionadoId(termoId);
   }, []);
 
   if (!usuario) {
@@ -64,7 +64,7 @@ function AppContent() {
       case 'lista':
         return <TermList navegar={navegar} />;
       case 'detalhe':
-        return <TermDetail termo={typeof termoSelecionado === 'string' ? null : termoSelecionado} navegar={navegar} />;
+        return <TermDetail termId={termoSelecionadoId} navegar={navegar} />;
       case 'chat':
         return <ChatView navegar={navegar} />;
       case 'analise':
