@@ -1,25 +1,41 @@
-import { createContext, useContext, useState, useCallback } from 'react';
+import { createContext, useContext, useState, useCallback, useEffect } from 'react';
 import type { ReactNode } from 'react';
-import type { UsuarioAtual, Setor } from '../types';
+import type { UsuarioAtual, UserOut } from '../types';
 import { SETORES } from '../constants';
+import { loginRequest, getMe } from '../services/auth';
+import { ApiError } from '../services/api';
 
 interface AuthContextType {
   usuario: UsuarioAtual | null;
-  login: (setor: Setor, nomeUsuario: string, subunidade?: string) => void;
+  loading: boolean;
+  error: string | null;
+  login: (matricula: string, senha: string) => Promise<void>;
   logout: () => void;
 }
 
-const AUTH_KEY = 'fsph_auth';
+const TOKEN_KEY = 'fsph_token';
+const USER_KEY = 'fsph_user';
 
-function loadAuth(): UsuarioAtual | null {
+function deriveUsuario(userOut: UserOut): UsuarioAtual | null {
+  const setor = SETORES.find((s) => s.id === userOut.setor_id);
+  if (!setor) return null;
+  return {
+    id: userOut.setor_id,
+    nome: setor.nome,
+    icon: setor.icon,
+    descricao: setor.descricao,
+    nomeUsuarioLogado: userOut.nome,
+    subunidade: userOut.subunidade ?? undefined,
+    is_admin: userOut.is_admin ?? false,
+  };
+}
+
+function loadCachedUser(): UsuarioAtual | null {
   try {
-    const raw = localStorage.getItem(AUTH_KEY);
+    const raw = localStorage.getItem(USER_KEY);
     if (!raw) return null;
-    const parsed = JSON.parse(raw);
-    // Reconstruct icon from SETORES (icons can't be serialized)
-    const setor = SETORES.find((s) => s.id === parsed.id);
-    if (!setor) return null;
-    return { ...parsed, icon: setor.icon, descricao: setor.descricao };
+    const userOut: UserOut = JSON.parse(raw);
+    return deriveUsuario(userOut);
   } catch {
     return null;
   }
@@ -28,25 +44,54 @@ function loadAuth(): UsuarioAtual | null {
 const AuthContext = createContext<AuthContextType | null>(null);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [usuario, setUsuario] = useState<UsuarioAtual | null>(loadAuth);
+  const [usuario, setUsuario] = useState<UsuarioAtual | null>(loadCachedUser);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  const login = useCallback((setor: Setor, nomeUsuario: string, subunidade?: string) => {
-    const user: UsuarioAtual = {
-      ...setor,
-      nomeUsuarioLogado: nomeUsuario || 'Usuário Padrão',
-      subunidade,
-    };
-    localStorage.setItem(AUTH_KEY, JSON.stringify(user));
-    setUsuario(user);
+  // Valida o token em background ao montar — faz logout silencioso se expirado
+  useEffect(() => {
+    const token = localStorage.getItem(TOKEN_KEY);
+    if (!token) {
+      setUsuario(null);
+      localStorage.removeItem(USER_KEY);
+      return;
+    }
+    getMe(token).catch(() => {
+      localStorage.removeItem(TOKEN_KEY);
+      localStorage.removeItem(USER_KEY);
+      setUsuario(null);
+    });
+  }, []);
+
+  const login = useCallback(async (matricula: string, senha: string) => {
+    setError(null);
+    setLoading(true);
+    try {
+      const response = await loginRequest(matricula, senha);
+      localStorage.setItem(TOKEN_KEY, response.access_token);
+      localStorage.setItem(USER_KEY, JSON.stringify(response.user));
+      const derived = deriveUsuario(response.user);
+      if (derived) setUsuario(derived);
+    } catch (err) {
+      if (err instanceof ApiError) {
+        setError(err.message);
+      } else {
+        setError('Erro ao conectar com o servidor. Tente novamente.');
+      }
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
   const logout = useCallback(() => {
-    localStorage.removeItem(AUTH_KEY);
+    localStorage.removeItem(TOKEN_KEY);
+    localStorage.removeItem(USER_KEY);
     setUsuario(null);
+    setError(null);
   }, []);
 
   return (
-    <AuthContext.Provider value={{ usuario, login, logout }}>
+    <AuthContext.Provider value={{ usuario, loading, error, login, logout }}>
       {children}
     </AuthContext.Provider>
   );

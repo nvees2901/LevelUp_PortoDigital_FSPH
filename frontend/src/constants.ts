@@ -1,7 +1,7 @@
 import {
   FileText, PieChart, Users, ShieldCheck, FileCheck, Activity,
 } from 'lucide-react';
-import type { Setor, FluxoConfig, TermoMock } from './types';
+import type { Setor, FluxoConfig } from './types';
 
 export const COLORS = {
   primary: '#0a2f64',
@@ -57,40 +57,8 @@ export function statusColor(s: string): string {
 }
 
 export function modalColor(m: string): string {
-  if (m === 'Licitação')     return 'bg-blue-100 text-blue-800';
-  if (m === 'Dispensa')      return 'bg-orange-100 text-orange-800';
-  return 'bg-emerald-100 text-emerald-800';
+  if (m === 'capacitacao')     return 'bg-violet-100 text-violet-800';
+  if (m === 'aquisicao')       return 'bg-blue-100 text-blue-800';
+  if (m === 'servico_tecnico') return 'bg-orange-100 text-orange-800';
+  return 'bg-slate-100 text-slate-700';
 }
-
-export const DADOS_INICIAIS: TermoMock[] = [
-  {
-    id: 'TR-2025-001', objeto: 'Aquisição de Reagentes e Insumos para LACEN',
-    unidade: 'LACEN – Lab. Central de Sergipe', autor: 'Ana Lima', data: '10/01/2025',
-    status: 'Aguardando Jurídico', valor: 'R$ 350.000,00', modalidade: 'Licitação', scoreIA: 92,
-    checklist: { dfd: true, etp: true, tr: true, dotacao: true, auth_dirop: true, auth_diraf: true, auth_diger: false },
-  },
-  {
-    id: 'TR-2025-002', objeto: 'Contratação de Serviços de Limpeza e Conservação',
-    unidade: 'HEMOSE – Hemocentro de Sergipe', autor: 'Carlos Melo', data: '15/01/2025',
-    status: 'Aguardando DIRAF', valor: 'R$ 850.000,00', modalidade: 'Licitação', scoreIA: 88,
-    checklist: { dfd: true, etp: true, tr: true, dotacao: true, auth_dirop: true, auth_diraf: false, auth_diger: false },
-  },
-  {
-    id: 'TR-2025-003', objeto: 'Manutenção Preventiva de Equipamentos do SVO',
-    unidade: 'SVO – Serviço de Verificação de Óbitos', autor: 'Fernanda Reis', data: '18/01/2025',
-    status: 'Instrução COLIC', valor: 'R$ 85.000,00', modalidade: 'Dispensa', scoreIA: 95,
-    checklist: { dfd: true, etp: true, tr: true, dotacao: true, auth_dirop: true, auth_diraf: true, auth_diger: true },
-  },
-  {
-    id: 'TR-2025-004', objeto: 'Software de Gestão Hospitalar – Licença Exclusiva',
-    unidade: 'Área Administrativa', autor: 'Pedro Costa', data: '20/01/2025',
-    status: 'Rascunho', valor: 'R$ 120.000,00', modalidade: 'Inexigibilidade', scoreIA: null,
-    checklist: { dfd: false, etp: false, tr: false, dotacao: false, auth_dirop: false, auth_diraf: false, auth_diger: false },
-  },
-  {
-    id: 'TR-2025-005', objeto: 'Renovação de Licenças Microsoft 365',
-    unidade: 'Área Administrativa', autor: 'Marcos TI', data: '05/01/2025',
-    status: 'Homologado', valor: 'R$ 45.000,00', modalidade: 'Inexigibilidade', scoreIA: 100,
-    checklist: { dfd: true, etp: true, tr: true, dotacao: true, auth_dirop: true, auth_diraf: true, auth_diger: true },
-  },
-];

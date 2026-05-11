@@ -6,9 +6,10 @@ O formato é compatível com a OpenAI Chat Completions API,
 o que facilita a integração direta sem transformações extras.
 """
 
+import uuid
 from typing import Any
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 
 # ------------------------------------------------------------------ #
@@ -68,6 +69,22 @@ class ChatRequest(BaseModel):
         description="ID da sessão existente. Omita para iniciar nova conversa.",
     )
 
+    term_id: str | None = Field(
+        default=None,
+        description="ID do TR a analisar (modo analisar)",
+    )
+
+    @field_validator("session_id", "term_id", mode="before")
+    @classmethod
+    def validate_uuid_fields(cls, v: Any) -> str | None:
+        if v is None:
+            return None
+        try:
+            uuid.UUID(str(v))
+        except (ValueError, AttributeError):
+            raise ValueError("Must be a valid UUID")
+        return str(v)
+
     @field_validator("mode")
     @classmethod
     def validate_mode(cls, v: str) -> str:
@@ -75,6 +92,12 @@ class ChatRequest(BaseModel):
         if v not in valid:
             raise ValueError(f"Modo inválido. Use: {', '.join(sorted(valid))}")
         return v
+
+    @model_validator(mode="after")
+    def term_id_only_for_analisar(self) -> "ChatRequest":
+        if self.term_id and self.mode != "analisar":
+            raise ValueError("term_id is only valid when mode='analisar'")
+        return self
 
 
 # ------------------------------------------------------------------ #
@@ -98,6 +121,15 @@ class ChatResponse(BaseModel):
         default=None,
         description="UUID do TR gerado (apenas quando modo='gerar' e TR finalizado)",
     )
+
+
+class ChatFinalizeResponse(BaseModel):
+    """
+    Resposta de POST /api/v1/chat/{session_id}/finalize.
+    Retorna o UUID do TR criado (ou já existente) a partir da sessão.
+    """
+
+    term_id: str = Field(description="UUID do TR gerado a partir da sessão de chat")
 
 
 class ChatSessionResponse(BaseModel):
@@ -125,3 +157,31 @@ class ChatSessionResponse(BaseModel):
     @classmethod
     def optional_uuid_to_str(cls, v: Any) -> str | None:
         return str(v) if v is not None else None
+
+
+class ChatSessionSummary(BaseModel):
+    """
+    Resumo de uma sessão para a listagem GET /api/v1/chat/sessions.
+    Não inclui o histórico completo de mensagens.
+    """
+
+    id: str
+    mode: str
+    title: str | None = None
+    message_count: int
+    generated_term_id: str | None = None
+    term_id: str | None = None
+    updated_at: str
+
+    model_config = {"from_attributes": True}
+
+    @field_validator("id", "generated_term_id", "term_id", mode="before")
+    @classmethod
+    def uuid_to_str(cls, v: Any) -> str | None:
+        return str(v) if v is not None else None
+
+
+class ChatSessionListResponse(BaseModel):
+    """Resposta de GET /api/v1/chat/sessions."""
+
+    items: list[ChatSessionSummary]

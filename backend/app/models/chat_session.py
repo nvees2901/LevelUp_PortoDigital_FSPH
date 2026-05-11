@@ -77,6 +77,29 @@ class ChatSession(Base):
         comment="ID do TR gerado por esta sessão (apenas modo 'gerar')",
     )
 
+    # --- Dono da sessão ---
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        comment="Usuário dono desta sessão",
+    )
+
+    # --- Título (derivado da 1ª mensagem) ---
+    title: Mapped[str | None] = mapped_column(
+        VARCHAR(120),
+        nullable=True,
+        comment="Título derivado da 1ª mensagem do usuário",
+    )
+
+    # --- TR vinculado (modo analisar) ---
+    term_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("terms.id", ondelete="SET NULL"),
+        nullable=True,
+        comment="TR vinculado (modo analisar)",
+    )
+
     # --- Timestamps ---
     created_at: Mapped[str] = mapped_column(
         VARCHAR(50),
@@ -91,11 +114,25 @@ class ChatSession(Base):
         nullable=False,
     )
 
-    # --- Relacionamento com Term ---
+    # --- Relacionamentos ---
     # SET NULL: deletar o TR não deleta a sessão de chat
+    # foreign_keys obrigatório: duas FKs apontam para terms.id
     generated_term: Mapped["Term | None"] = relationship(  # type: ignore[name-defined]
         "Term",
+        foreign_keys=[generated_term_id],
         back_populates="chat_sessions",
+    )
+
+    analyzed_term: Mapped["Term | None"] = relationship(  # type: ignore[name-defined]
+        "Term",
+        foreign_keys=[term_id],
+        lazy="select",
+    )
+
+    user: Mapped["User"] = relationship(  # type: ignore[name-defined]
+        "User",
+        foreign_keys=[user_id],
+        lazy="select",
     )
 
     # ------------------------------------------------------------------ #

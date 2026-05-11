@@ -20,6 +20,7 @@ from app.core.database import Base
 from app.models.term import Term  # noqa: F401
 from app.models.analysis import Analysis  # noqa: F401
 from app.models.chat_session import ChatSession  # noqa: F401
+from app.models.user import User  # noqa: F401
 
 config = context.config
 
