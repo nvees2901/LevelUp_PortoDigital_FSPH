@@ -23,6 +23,7 @@ export interface UsuarioAtual {
   descricao: string;
   nomeUsuarioLogado: string;
   subunidade?: string;
+  is_admin?: boolean;
 }
 
 // Auth — espelha os schemas Pydantic do backend
@@ -32,6 +33,7 @@ export interface UserOut {
   nome: string;
   setor_id: SetorId;
   subunidade: string | null;
+  is_admin: boolean;
 }
 
 export interface LoginResponse {
@@ -173,8 +175,28 @@ export interface DashboardStats {
   recent_terms: TermSummary[];
 }
 
+// Admin: Context Documents
+export interface ContextDocument {
+  id: string;
+  filename: string;
+  original_filename: string;
+  mime_type: string;
+  size_bytes: number;
+  uploaded_by_id: string;
+  uploaded_at: string;
+  indexed_at: string | null;
+  status: 'pending' | 'indexed' | 'failed';
+  chunks_count: number | null;
+  error_message: string | null;
+}
+
+export interface ContextDocumentList {
+  items: ContextDocument[];
+  total: number;
+}
+
 // Navigation
-export type TelaId = 'dashboard' | 'lista' | 'detalhe' | 'chat' | 'base' | 'analise';
+export type TelaId = 'dashboard' | 'lista' | 'detalhe' | 'chat' | 'base' | 'analise' | 'admin';
 
 export interface MensagemChat {
   de: 'ia' | 'user';

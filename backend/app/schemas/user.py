@@ -14,6 +14,7 @@ class UserOut(BaseModel):
     nome: str
     setor_id: str
     subunidade: str | None = None
+    is_admin: bool = False
 
     model_config = {"from_attributes": True}
 

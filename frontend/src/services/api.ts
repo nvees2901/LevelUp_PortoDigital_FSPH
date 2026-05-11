@@ -8,6 +8,8 @@ import type {
   ChatResponse,
   ChatSessionResponse,
   DashboardStats,
+  ContextDocument,
+  ContextDocumentList,
 } from '../types';
 
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000/api/v1';
@@ -206,4 +208,30 @@ export async function finalizeChatSession(sessionId: string): Promise<{ term_id:
 
 export async function getDashboardStats(): Promise<DashboardStats> {
   return request<DashboardStats>('/dashboard/stats');
+}
+
+// --- Admin: Context Documents ---
+
+export async function listContextDocuments(): Promise<ContextDocumentList> {
+  return request<ContextDocumentList>('/admin/context-documents');
+}
+
+export async function uploadContextDocument(file: File): Promise<ContextDocument> {
+  const formData = new FormData();
+  formData.append('file', file);
+  const url = `${API_BASE}/admin/context-documents`;
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: getAuthHeader(),
+    body: formData,
+  });
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ message: 'Erro no upload' }));
+    throw new ApiError(response.status, error.message, error.detail);
+  }
+  return response.json();
+}
+
+export async function deleteContextDocument(id: string): Promise<void> {
+  return request<void>(`/admin/context-documents/${id}`, { method: 'DELETE' });
 }

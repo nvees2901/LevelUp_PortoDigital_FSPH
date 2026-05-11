@@ -1,4 +1,4 @@
-import { PieChart, FileText, Archive, Bot, Upload, LogOut } from 'lucide-react';
+import { PieChart, FileText, Archive, Bot, LogOut, Brain } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import type { TelaId } from '../../types';
 
@@ -31,7 +31,6 @@ export default function Sidebar({ telaAtual, navegar }: SidebarProps) {
           <p className="text-xs uppercase text-slate-400 font-bold px-2 tracking-wider">Assistente IA</p>
         </div>
         {btn('chat', 'Chat IA / Consulta', Bot)}
-        {btn('anexar', 'Anexar Documento', Upload)}
         <div className="px-3 py-2 mt-1">
           <p className="text-xs text-slate-400 leading-relaxed">
             {usuario.id === 'demandante'
@@ -39,15 +38,20 @@ export default function Sidebar({ telaAtual, navegar }: SidebarProps) {
               : 'Consulte fluxos, legislação e analise documentos.'}
           </p>
         </div>
+        {usuario.is_admin && (
+          <>
+            <div className="pt-4 pb-1">
+              <p className="text-xs uppercase text-slate-400 font-bold px-2 tracking-wider">Administração</p>
+            </div>
+            {btn('admin', 'Base de Conhecimento IA', Brain)}
+          </>
+        )}
       </nav>
       <div className="p-3 border-t border-slate-200">
         <button onClick={logout}
           className="flex items-center gap-2 text-red-500 hover:bg-red-50 w-full p-2.5 rounded-lg transition-colors text-sm font-medium">
           <LogOut size={16} /> Sair do Sistema
         </button>
-        <div className="mx-2 mt-2 px-2 py-1 rounded text-xs text-center font-semibold bg-amber-50 text-amber-700">
-          Modo demonstração
-        </div>
       </div>
     </aside>
   );
