@@ -114,6 +114,83 @@ class ChatSessionNotFoundError(FSPHBaseException):
         )
 
 
+class InvalidCredentialsError(FSPHBaseException):
+    """Levantado em falha de autenticação (matrícula ou senha inválidos)."""
+
+    def __init__(self) -> None:
+        super().__init__(
+            message="Matrícula ou senha inválidos.",
+            error_code="INVALID_CREDENTIALS",
+            http_status=status.HTTP_401_UNAUTHORIZED,
+        )
+
+
+class InactiveUserError(FSPHBaseException):
+    """Levantado quando o usuário existe mas está inativo."""
+
+    def __init__(self) -> None:
+        super().__init__(
+            message="Conta de usuário inativa. Contate o administrador.",
+            error_code="USER_INACTIVE",
+            http_status=status.HTTP_403_FORBIDDEN,
+        )
+
+
+class InvalidTokenError(FSPHBaseException):
+    """Levantado quando o JWT é inválido ou expirado."""
+
+    def __init__(self) -> None:
+        super().__init__(
+            message="Token de autenticação inválido ou expirado.",
+            error_code="INVALID_TOKEN",
+            http_status=status.HTTP_401_UNAUTHORIZED,
+        )
+
+
+class MissingAuthHeaderError(FSPHBaseException):
+    """Levantado quando o header Authorization não é fornecido."""
+
+    def __init__(self) -> None:
+        super().__init__(
+            message="Header de autorização não fornecido.",
+            error_code="MISSING_AUTH",
+            http_status=status.HTTP_401_UNAUTHORIZED,
+        )
+
+
+class WorkflowForbiddenError(FSPHBaseException):
+    """Levantado quando o usuário não pertence ao setor que pode executar a transição."""
+
+    def __init__(self, setor_esperado: str) -> None:
+        super().__init__(
+            message=f"Ação não permitida. Apenas o setor '{setor_esperado}' pode executar esta transição.",
+            error_code="WORKFLOW_FORBIDDEN",
+            http_status=status.HTTP_403_FORBIDDEN,
+        )
+
+
+class ChecklistIncompleteError(FSPHBaseException):
+    """Levantado quando se tenta avançar um TR cujo checklist não está 100% completo."""
+
+    def __init__(self) -> None:
+        super().__init__(
+            message="Não é possível avançar: o checklist deve estar 100% completo.",
+            error_code="CHECKLIST_INCOMPLETE",
+            http_status=status.HTTP_422_UNPROCESSABLE_ENTITY,
+        )
+
+
+class TerminalStateError(FSPHBaseException):
+    """Levantado quando se tenta avançar um TR já homologado (estado terminal)."""
+
+    def __init__(self) -> None:
+        super().__init__(
+            message="Este Termo de Referência já foi homologado e não pode ser avançado.",
+            error_code="TERMINAL_STATE",
+            http_status=status.HTTP_409_CONFLICT,
+        )
+
+
 # ------------------------------------------------------------------ #
 # Handlers globais — registrados no FastAPI em main.py
 # ------------------------------------------------------------------ #

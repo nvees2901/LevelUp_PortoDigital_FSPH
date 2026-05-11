@@ -4,10 +4,16 @@ import type {
   TermCreate,
   TermUpdate,
   AnalysisResponse,
+  ChatMode,
   ChatRequest,
   ChatResponse,
   ChatSessionResponse,
+  ChatSessionListResponse,
   DashboardStats,
+  ContextDocument,
+  ContextDocumentList,
+  TermChecklistOut,
+  WorkflowEventOut,
 } from '../types';
 
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000/api/v1';
@@ -19,6 +25,12 @@ export class ApiError extends Error {
   }
 }
 
+// Must match TOKEN_KEY in AuthContext.tsx ('fsph_token')
+function getAuthHeader(): Record<string, string> {
+  const token = localStorage.getItem('fsph_token');
+  return token ? { 'Authorization': `Bearer ${token}` } : {};
+}
+
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
   const url = `${API_BASE}${path}`;
   const { headers: extraHeaders, ...restOptions } = options ?? {};
@@ -26,6 +38,7 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
     ...restOptions,
     headers: {
       'Content-Type': 'application/json',
+      ...getAuthHeader(),
       ...extraHeaders,
     },
   });
@@ -80,11 +93,37 @@ export async function deleteTerm(id: string): Promise<void> {
   return request<void>(`/terms/${id}`, { method: 'DELETE' });
 }
 
+export async function getPendentes(): Promise<TermResponse[]> {
+  return request<TermResponse[]>('/terms/pendentes');
+}
+
 export async function exportTermPdf(id: string): Promise<Blob> {
   const url = `${API_BASE}/terms/${id}/export/pdf`;
-  const response = await fetch(url);
+  const response = await fetch(url, { headers: getAuthHeader() });
   if (!response.ok) throw new ApiError(response.status, 'Erro ao exportar PDF');
   return response.blob();
+}
+
+export async function getChecklist(termId: string): Promise<TermChecklistOut> {
+  return request<TermChecklistOut>(`/terms/${termId}/checklist`);
+}
+
+export async function getHistorico(termId: string): Promise<WorkflowEventOut[]> {
+  return request<WorkflowEventOut[]>(`/terms/${termId}/historico`);
+}
+
+export async function avancarTermo(termId: string, observacao?: string): Promise<TermResponse> {
+  return request<TermResponse>(`/terms/${termId}/avancar`, {
+    method: 'POST',
+    body: JSON.stringify({ observacao: observacao ?? null }),
+  });
+}
+
+export async function devolverTermo(termId: string, observacao: string): Promise<TermResponse> {
+  return request<TermResponse>(`/terms/${termId}/devolver`, {
+    method: 'POST',
+    body: JSON.stringify({ observacao }),
+  });
 }
 
 // --- Upload ---
@@ -95,6 +134,7 @@ export async function uploadDocument(file: File): Promise<{ term: TermResponse; 
   const url = `${API_BASE}/upload`;
   const response = await fetch(url, {
     method: 'POST',
+    headers: getAuthHeader(),
     body: formData,
   });
   if (!response.ok) {
@@ -140,7 +180,7 @@ export async function streamChatMessage(data: ChatRequest, callbacks: StreamCall
   const url = `${API_BASE}/chat/stream`;
   const response = await fetch(url, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...getAuthHeader() },
     body: JSON.stringify(data),
   });
 
@@ -190,8 +230,45 @@ export async function deleteChatSession(id: string): Promise<void> {
   return request<void>(`/chat/${id}`, { method: 'DELETE' });
 }
 
+export async function finalizeChatSession(sessionId: string): Promise<{ term_id: string }> {
+  return request<{ term_id: string }>(`/chat/${sessionId}/finalize`, { method: 'POST' });
+}
+
 // --- Dashboard ---
 
 export async function getDashboardStats(): Promise<DashboardStats> {
   return request<DashboardStats>('/dashboard/stats');
+}
+
+// --- Admin: Context Documents ---
+
+export async function listContextDocuments(): Promise<ContextDocumentList> {
+  return request<ContextDocumentList>('/admin/context-documents');
+}
+
+export async function uploadContextDocument(file: File): Promise<ContextDocument> {
+  const formData = new FormData();
+  formData.append('file', file);
+  const url = `${API_BASE}/admin/context-documents`;
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: getAuthHeader(),
+    body: formData,
+  });
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ message: 'Erro no upload' }));
+    throw new ApiError(response.status, error.message, error.detail);
+  }
+  return response.json();
+}
+
+export async function deleteContextDocument(id: string): Promise<void> {
+  return request<void>(`/admin/context-documents/${id}`, { method: 'DELETE' });
+}
+
+// --- Chat Sessions ---
+
+export async function listChatSessions(mode?: ChatMode): Promise<ChatSessionListResponse> {
+  const qs = mode ? `?mode=${encodeURIComponent(mode)}` : '';
+  return request<ChatSessionListResponse>(`/chat/sessions${qs}`);
 }

@@ -109,9 +109,18 @@ class TermUpdate(BaseModel):
     def validate_status(cls, v: str | None) -> str | None:
         if v is None:
             return v
-        valid = {"rascunho", "em_analise", "validado", "reprovado"}
+        valid = {
+            "Rascunho",
+            "Aguardando DIROP",
+            "Aguardando DIRAF",
+            "Aguardando DIGER",
+            "Instrução COLIC",
+            "Aguardando Jurídico",
+            "Aprovação DIRAF/DIGER",
+            "Homologado",
+        }
         if v not in valid:
-            raise ValueError(f"Status inválido. Use: {', '.join(sorted(valid))}")
+            raise ValueError("Status inválido. Use um dos valores do fluxo de tramitação.")
         return v
 
 
@@ -122,7 +131,7 @@ class TermUpdate(BaseModel):
 class TermResponse(BaseModel):
     """
     Resposta completa de um TR (GET /api/v1/terms/{id}).
-    
+
     model_config com from_attributes=True:
       Permite criar este schema diretamente de um objeto SQLAlchemy:
         term_obj = await repo.get_by_id(db, id)
@@ -133,6 +142,8 @@ class TermResponse(BaseModel):
     title: str
     category: str
     status: str
+    setor_atual: str
+    created_by_id: str | None = None
     content: str | None = None
     sections: dict[str, Any] | None = None
     variable_fields: list[str] | None = None
@@ -143,10 +154,12 @@ class TermResponse(BaseModel):
 
     model_config = {"from_attributes": True}
 
-    @field_validator("id", mode="before")
+    @field_validator("id", "created_by_id", mode="before")
     @classmethod
-    def uuid_to_str(cls, v: Any) -> str:
+    def uuid_to_str(cls, v: Any) -> str | None:
         """Converte UUID do SQLAlchemy para string na resposta JSON."""
+        if v is None:
+            return None
         return str(v)
 
 
@@ -160,6 +173,7 @@ class TermSummary(BaseModel):
     title: str
     category: str
     status: str
+    setor_atual: str
     estimated_value: Decimal | None = None
     original_filename: str | None = None
     created_at: str

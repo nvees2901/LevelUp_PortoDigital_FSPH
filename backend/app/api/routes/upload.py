@@ -23,8 +23,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.core.database import get_db
+from app.core.security import CurrentUser
 from app.repositories.analysis import AnalysisRepository
+from app.repositories.checklist import ChecklistRepository
 from app.repositories.term import TermRepository
+from app.repositories.workflow_event import WorkflowEventRepository
 from app.schemas.analysis import AnalysisResponse, CriterionResult, Suggestion
 from app.schemas.term import TermResponse
 from app.services.compliance import ComplianceService
@@ -48,7 +51,7 @@ class UploadResponse:
 
 
 @router.post("", status_code=201)
-async def upload_document(file: UploadFile, db: DbDep):
+async def upload_document(file: UploadFile, db: DbDep, current_user: CurrentUser):
     """
     Upload de documento com análise automática (HU-01, HU-05).
 
@@ -89,19 +92,32 @@ async def upload_document(file: UploadFile, db: DbDep):
     term = await TermRepository.create(db, {
         "title": title,
         "category": category,
-        "status": "em_analise",
+        "status": "Rascunho",
         "content": text[:50_000],  # limita a 50k chars no banco
         "sections": sections,
         "variable_fields": variable_fields,
         "estimated_value": estimated_value,
         "original_filename": filename,
         "file_path": file_path,
+        "created_by_id": current_user.id,
     })
 
-    # --- 7. Analisa conformidade ---
+    # --- 7. Cria checklist e registra evento de criação ---
+    await ChecklistRepository.create_for_term(db, str(term.id))
+    await WorkflowEventRepository.create(
+        db,
+        term_id=str(term.id),
+        ator_id=str(current_user.id),
+        acao="criar",
+        para_setor="demandante",
+    )
+
+    # --- 8. Analisa conformidade ---
     compliance = ComplianceService.analyze(text, sections)
 
-    # --- 8. Persiste a Analysis ---
+    # --- 9. Persiste a Analysis ---
+    # Nota: compliance["status"] é informativo — não altera Term.status
+    # O status do TR é controlado exclusivamente pelo fluxo de tramitação.
     analysis = await AnalysisRepository.create(db, {
         "term_id": term.id,
         "compliance_score": compliance["compliance_score"],
@@ -109,11 +125,6 @@ async def upload_document(file: UploadFile, db: DbDep):
         "criteria_results": compliance["criteria_results"],
         "suggestions": compliance["suggestions"],
         "legal_references": compliance["legal_references"],
-    })
-
-    # --- 9. Atualiza status do TR com base na análise ---
-    await TermRepository.update(db, str(term.id), {
-        "status": compliance["status"],
     })
 
     logger.info(

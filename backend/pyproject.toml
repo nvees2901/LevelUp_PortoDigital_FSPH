@@ -27,6 +27,10 @@ dependencies = [
     "python-docx>=1.1.0",   # arquivos .docx
     # --- Geração de PDF ---
     "reportlab>=4.2.0",     # geração de PDF com layout customizado
+    # --- Autenticação ---
+    "passlib[bcrypt]>=1.7.4",  # hash de senhas com bcrypt
+    "bcrypt<5",                 # passlib 1.7.x é incompatível com bcrypt>=5
+    "pyjwt>=2.9.0",            # geração e verificação de JWT
     # --- Utilitários ---
     "aiofiles>=24.0.0",     # leitura/escrita async de arquivos
     # --- RAG / Banco Vetorial ---

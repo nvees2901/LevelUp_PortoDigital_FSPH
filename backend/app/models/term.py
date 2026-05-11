@@ -15,7 +15,7 @@ import unicodedata
 import uuid
 from decimal import Decimal
 
-from sqlalchemy import DECIMAL, TEXT, VARCHAR, Enum, String, text
+from sqlalchemy import DECIMAL, TEXT, VARCHAR, Enum, ForeignKey, String, text
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.sql import func
@@ -36,11 +36,15 @@ class TermCategory(str):
 
 
 class TermStatus(str):
-    """Ciclo de vida de um Termo de Referência."""
-    RASCUNHO = "rascunho"           # recém-criado / sem análise
-    EM_ANALISE = "em_analise"       # análise em progresso
-    VALIDADO = "validado"           # aprovado (score >= 80)
-    REPROVADO = "reprovado"         # reprovado (score < 50)
+    """Ciclo de vida de um Termo de Referência (fluxo de tramitação)."""
+    RASCUNHO = "Rascunho"
+    AGUARDANDO_DIROP = "Aguardando DIROP"
+    AGUARDANDO_DIRAF = "Aguardando DIRAF"
+    AGUARDANDO_DIGER = "Aguardando DIGER"
+    INSTRUCAO_COLIC = "Instrução COLIC"
+    AGUARDANDO_JURIDICO = "Aguardando Jurídico"
+    APROVACAO_DIRAF_DIGER = "Aprovação DIRAF/DIGER"
+    HOMOLOGADO = "Homologado"
 
 
 # ------------------------------------------------------------------ #
@@ -86,12 +90,37 @@ class Term(Base):
 
     status: Mapped[str] = mapped_column(
         Enum(
-            "rascunho", "em_analise", "validado", "reprovado",
+            "Rascunho",
+            "Aguardando DIROP",
+            "Aguardando DIRAF",
+            "Aguardando DIGER",
+            "Instrução COLIC",
+            "Aguardando Jurídico",
+            "Aprovação DIRAF/DIGER",
+            "Homologado",
             name="term_status",
         ),
         nullable=False,
-        default="rascunho",
-        comment="Status atual do TR no fluxo de validação",
+        default="Rascunho",
+        comment="Status atual do TR no fluxo de tramitação",
+    )
+
+    setor_atual: Mapped[str] = mapped_column(
+        Enum(
+            "demandante", "dirop", "diraf", "diger", "colic", "juridico",
+            name="user_setor",
+            create_constraint=False,
+        ),
+        nullable=False,
+        default="demandante",
+        comment="Setor responsável pelo TR no momento atual",
+    )
+
+    created_by_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+        comment="Usuário que criou o TR",
     )
 
     content: Mapped[str | None] = mapped_column(
@@ -163,7 +192,30 @@ class Term(Base):
     chat_sessions: Mapped[list["ChatSession"]] = relationship(  # type: ignore[name-defined]
         "ChatSession",
         back_populates="generated_term",
+        foreign_keys="[ChatSession.generated_term_id]",
         lazy="select",
+    )
+
+    # --- Workflow ---
+    checklist: Mapped["TermChecklist | None"] = relationship(  # type: ignore[name-defined]
+        "TermChecklist",
+        back_populates="term",
+        uselist=False,
+        cascade="all, delete-orphan",
+        lazy="select",
+    )
+
+    events: Mapped[list["WorkflowEvent"]] = relationship(  # type: ignore[name-defined]
+        "WorkflowEvent",
+        back_populates="term",
+        cascade="all, delete-orphan",
+        lazy="select",
+    )
+
+    created_by: Mapped["User | None"] = relationship(  # type: ignore[name-defined]
+        "User",
+        lazy="select",
+        foreign_keys=[created_by_id],
     )
 
     # ------------------------------------------------------------------ #

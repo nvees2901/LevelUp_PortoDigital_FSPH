@@ -57,10 +57,12 @@ class Settings(BaseSettings):
     DOCS_PATH: str = str(_PROJECT_ROOT / "documents")  # pasta com Lei 14133 e TRs aprovados
 
     # ------------------------------------------------------------------ #
-    # Segurança
+    # Segurança / JWT
     # ------------------------------------------------------------------ #
     SECRET_KEY: str = "change-me-in-production-use-random-256-bit-string"
-    # Usado para assinar tokens JWT no futuro. DEVE ser alterado em produção.
+    # Em produção, gere com: python -c "import secrets; print(secrets.token_urlsafe(64))"
+    JWT_ALGORITHM: str = "HS256"
+    JWT_EXPIRE_MINUTES: int = 480  # 8 horas
 
     # ------------------------------------------------------------------ #
     # Aplicação
@@ -87,6 +89,12 @@ class Settings(BaseSettings):
     # ------------------------------------------------------------------ #
     MAX_FILE_SIZE_MB: int = 10  # limite máximo por arquivo (critério de aceitação do HU-01)
     UPLOAD_DIR: str = "uploads"  # pasta onde os arquivos ficam armazenados no servidor
+
+    # ------------------------------------------------------------------ #
+    # Documentos de contexto da IA (gerenciados pelo administrador)
+    # ------------------------------------------------------------------ #
+    CONTEXT_DOCS_DIR: str = "./context_documents"   # pasta de armazenamento dos docs de contexto
+    CONTEXT_DOC_MAX_SIZE_MB: int = 20               # limite por arquivo de contexto
 
     # ------------------------------------------------------------------ #
     # Propriedade calculada — não vem do .env

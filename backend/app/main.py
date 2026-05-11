@@ -21,7 +21,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api.routes import analysis, chat, dashboard, terms, upload
+from app.api.routes import admin, analysis, auth, chat, dashboard, terms, upload, workflow
 from app.core.config import settings
 from app.core.database import engine
 from app.utils.exceptions import register_exception_handlers
@@ -164,11 +164,14 @@ register_exception_handlers(app)
 
 API_V1_PREFIX = "/api/v1"
 
+app.include_router(auth.router,      prefix=API_V1_PREFIX)  # POST /auth/login, GET /auth/me
+app.include_router(workflow.router,  prefix=API_V1_PREFIX)  # BEFORE terms — /terms/pendentes (static) must resolve before /terms/{id}
 app.include_router(terms.router,     prefix=API_V1_PREFIX)
 app.include_router(upload.router,    prefix=API_V1_PREFIX)
 app.include_router(analysis.router,  prefix=API_V1_PREFIX)
 app.include_router(chat.router,      prefix=API_V1_PREFIX)
 app.include_router(dashboard.router, prefix=API_V1_PREFIX)
+app.include_router(admin.router,     prefix=API_V1_PREFIX)  # POST/GET/DELETE /admin/context-documents
 
 
 # ------------------------------------------------------------------ #

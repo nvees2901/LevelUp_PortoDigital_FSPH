@@ -28,10 +28,16 @@ async def get_dashboard_stats(db: DbDep):
     Retorna:
     {
       "total": 42,
-      "validados": 18,
-      "em_analise": 10,
-      "rascunhos": 8,
-      "reprovados": 6,
+      "por_status": {
+        "Rascunho": 8,
+        "Aguardando DIROP": 10,
+        "Aguardando DIRAF": 5,
+        "Aguardando DIGER": 3,
+        "Instrução COLIC": 2,
+        "Aguardando Jurídico": 4,
+        "Aprovação DIRAF/DIGER": 2,
+        "Homologado": 8
+      },
       "conformidade_media": 74.5,
       "recent_terms": [ ...5 TRs mais recentes... ]
     }

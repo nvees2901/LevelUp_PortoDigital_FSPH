@@ -23,29 +23,43 @@ export interface UsuarioAtual {
   descricao: string;
   nomeUsuarioLogado: string;
   subunidade?: string;
+  is_admin?: boolean;
 }
 
-// Mock process type (matches original App.jsx)
-export interface TermoMock {
+// Auth — espelha os schemas Pydantic do backend
+export interface UserOut {
   id: string;
-  objeto: string;
-  unidade: string;
-  autor: string;
-  data: string;
-  status: string;
-  valor: string;
-  modalidade: string;
-  scoreIA: number | null;
-  checklist: Record<string, boolean>;
-  _uuid?: string;
+  matricula: string;
+  nome: string;
+  setor_id: SetorId;
+  subunidade: string | null;
+  is_admin: boolean;
 }
+
+export interface LoginResponse {
+  access_token: string;
+  token_type: string;
+  user: UserOut;
+}
+
+// COLIC workflow status
+export type TermStatus =
+  | 'Rascunho'
+  | 'Aguardando DIROP'
+  | 'Aguardando DIRAF'
+  | 'Aguardando DIGER'
+  | 'Instrução COLIC'
+  | 'Aguardando Jurídico'
+  | 'Aprovação DIRAF/DIGER'
+  | 'Homologado';
 
 // Backend API types (matching Pydantic schemas)
 export interface TermResponse {
   id: string;
   title: string;
   category: 'capacitacao' | 'aquisicao' | 'servico_tecnico' | 'outro';
-  status: 'rascunho' | 'em_analise' | 'validado' | 'reprovado';
+  status: TermStatus;
+  setor_atual: SetorId;
   content: string | null;
   sections: Record<string, unknown> | null;
   variable_fields: string[] | null;
@@ -59,7 +73,8 @@ export interface TermSummary {
   id: string;
   title: string;
   category: string;
-  status: string;
+  status: TermStatus;
+  setor_atual: SetorId;
   estimated_value: number | null;
   original_filename: string | null;
   created_at: string;
@@ -117,6 +132,8 @@ export interface AnalysisResponse {
 }
 
 // Chat types
+export type ChatMode = 'gerar' | 'analisar' | 'consultar';
+
 export interface ChatMessage {
   role: 'user' | 'assistant' | 'system';
   content: string;
@@ -124,8 +141,9 @@ export interface ChatMessage {
 
 export interface ChatRequest {
   message: string;
-  mode: 'gerar' | 'analisar' | 'consultar';
+  mode: ChatMode;
   session_id?: string;
+  term_id?: string;
 }
 
 export interface ChatResponse {
@@ -145,25 +163,75 @@ export interface ChatSessionResponse {
   updated_at: string;
 }
 
+export interface ChatSessionSummary {
+  id: string;
+  mode: string;
+  title: string | null;
+  message_count: number;
+  generated_term_id: string | null;
+  term_id: string | null;
+  updated_at: string;
+}
+
+export interface ChatSessionListResponse {
+  items: ChatSessionSummary[];
+}
+
 // Dashboard types (matches GET /api/v1/dashboard/stats)
 export interface DashboardStats {
   total: number;
-  validados: number;
-  em_analise: number;
-  rascunhos: number;
-  reprovados: number;
+  por_status: Record<string, number>;
   conformidade_media: number;
   recent_terms: TermSummary[];
 }
 
+// Admin: Context Documents
+export interface ContextDocument {
+  id: string;
+  filename: string;
+  original_filename: string;
+  mime_type: string;
+  size_bytes: number;
+  uploaded_by_id: string;
+  uploaded_at: string;
+  indexed_at: string | null;
+  status: 'pending' | 'indexed' | 'failed';
+  chunks_count: number | null;
+  error_message: string | null;
+}
+
+export interface ContextDocumentList {
+  items: ContextDocument[];
+  total: number;
+}
+
+export interface TermChecklistOut {
+  term_id: string;
+  dfd: boolean;
+  etp: boolean;
+  tr: boolean;
+  dotacao: boolean;
+  auth_dirop: boolean;
+  auth_diraf: boolean;
+  auth_diger: boolean;
+  updated_at: string;
+}
+
+export interface WorkflowEventOut {
+  id: string;
+  term_id: string;
+  ator_nome: string | null;
+  de_setor: string | null;
+  para_setor: string | null;
+  acao: string;
+  observacao: string | null;
+  created_at: string;
+}
+
 // Navigation
-export type TelaId = 'dashboard' | 'lista' | 'detalhe' | 'chat' | 'anexar' | 'base' | 'analise';
+export type TelaId = 'dashboard' | 'lista' | 'detalhe' | 'chat' | 'base' | 'analise' | 'admin';
 
 export interface MensagemChat {
   de: 'ia' | 'user';
   texto: string;
-  isArquivo?: boolean;
-  isAnalise?: boolean;
-  isConclusao?: boolean;
-  trId?: string;
 }
