@@ -3,6 +3,7 @@ chat.py (route) — Chat IA com 3 modos de operação
 
 POST   /api/v1/chat                        → enviar mensagem (cria sessão se necessário)
 POST   /api/v1/chat/stream                 → enviar mensagem com resposta streaming (SSE)
+GET    /api/v1/chat/sessions               → lista sessões do usuário autenticado
 POST   /api/v1/chat/{session_id}/finalize  → finalizar sessão e criar TR explicitamente
 GET    /api/v1/chat/{session_id}           → histórico da sessão
 DELETE /api/v1/chat/{session_id}           → encerrar sessão
@@ -23,7 +24,15 @@ from app.models.user import User
 from app.repositories.checklist import ChecklistRepository
 from app.repositories.term import TermRepository
 from app.repositories.workflow_event import WorkflowEventRepository
-from app.schemas.chat import ChatRequest, ChatFinalizeResponse, ChatResponse, ChatSessionResponse, ChatMessage
+from app.schemas.chat import (
+    ChatRequest,
+    ChatFinalizeResponse,
+    ChatResponse,
+    ChatSessionResponse,
+    ChatSessionListResponse,
+    ChatSessionSummary,
+    ChatMessage,
+)
 from app.services.ai_chat import AIChatService, AINotConfiguredError, AIProviderError
 from app.utils.exceptions import ChatSessionNotFoundError
 from app.utils.logging import get_logger
@@ -48,7 +57,20 @@ async def send_message(payload: ChatRequest, db: DbDep, current_user: CurrentUse
       - Se modo 'gerar' e TR completo detectado: salva TR automaticamente
     """
     # --- Carrega ou cria sessão ---
-    session = await _get_or_create_session(db, payload.session_id, payload.mode)
+    session = await _get_or_create_session(
+        db, payload.session_id, payload.mode, current_user, term_id=payload.term_id
+    )
+
+    # --- Define título na 1ª mensagem do usuário ---
+    if not session.title:
+        session.title = payload.message[:80]
+        await db.flush()
+
+    # --- Carrega conteúdo do TR vinculado (modo analisar) ---
+    term_content: str | None = None
+    if session.term_id:
+        term = await TermRepository.get_by_id(db, str(session.term_id))
+        term_content = term.content if term else None
 
     # --- Prepara histórico para a IA ---
     history = [m for m in session.messages if m.get("role") != "system"]
@@ -59,6 +81,7 @@ async def send_message(payload: ChatRequest, db: DbDep, current_user: CurrentUse
             message=payload.message,
             mode=session.mode,
             history=history,
+            term_content=term_content,
         )
     except AINotConfiguredError as e:
         raise HTTPException(status_code=503, detail=str(e))
@@ -93,7 +116,21 @@ async def stream_message(payload: ChatRequest, db: DbDep, current_user: CurrentU
     com metadados: {"done": true, "term_complete": bool}.
     Após o stream, o histórico é salvo normalmente.
     """
-    session = await _get_or_create_session(db, payload.session_id, payload.mode)
+    session = await _get_or_create_session(
+        db, payload.session_id, payload.mode, current_user, term_id=payload.term_id
+    )
+
+    # --- Define título na 1ª mensagem do usuário ---
+    if not session.title:
+        session.title = payload.message[:80]
+        await db.flush()
+
+    # --- Carrega conteúdo do TR vinculado (modo analisar) ---
+    term_content: str | None = None
+    if session.term_id:
+        term = await TermRepository.get_by_id(db, str(session.term_id))
+        term_content = term.content if term else None
+
     history = [m for m in session.messages if m.get("role") != "system"]
 
     try:
@@ -109,6 +146,7 @@ async def stream_message(payload: ChatRequest, db: DbDep, current_user: CurrentU
             message=payload.message,
             mode=session.mode,
             history=history,
+            term_content=term_content,
         ):
             # Tenta parsear como JSON de metadados (último chunk)
             try:
@@ -147,6 +185,26 @@ async def stream_message(payload: ChatRequest, db: DbDep, current_user: CurrentU
     )
 
 
+@router.get("/sessions", response_model=ChatSessionListResponse)
+async def list_sessions(
+    db: DbDep,
+    current_user: CurrentUser,
+    mode: str | None = None,
+):
+    """Lista sessões de chat do usuário autenticado, mais recentes primeiro."""
+    from sqlalchemy import select
+
+    stmt = select(ChatSession).where(ChatSession.user_id == current_user.id)
+    if mode:
+        stmt = stmt.where(ChatSession.mode == mode)
+    stmt = stmt.order_by(ChatSession.updated_at.desc()).limit(50)
+    result = await db.execute(stmt)
+    sessions = result.scalars().all()
+    return ChatSessionListResponse(
+        items=[ChatSessionSummary.model_validate(s) for s in sessions]
+    )
+
+
 @router.post("/{session_id}/finalize", response_model=ChatFinalizeResponse)
 async def finalize_session(session_id: str, db: DbDep, current_user: CurrentUser):
     """
@@ -156,7 +214,7 @@ async def finalize_session(session_id: str, db: DbDep, current_user: CurrentUser
     Idempotente: se o TR já foi criado anteriormente, retorna o mesmo term_id
     sem criar duplicatas.
     """
-    session = await _find_session(db, session_id)
+    session = await _find_session(db, session_id, current_user)
 
     # --- Valida modo da sessão ---
     if session.mode != "gerar":
@@ -178,7 +236,7 @@ async def finalize_session(session_id: str, db: DbDep, current_user: CurrentUser
 @router.get("/{session_id}", response_model=ChatSessionResponse)
 async def get_session(session_id: str, db: DbDep, current_user: CurrentUser):
     """Recupera o histórico completo de uma sessão de chat."""
-    session = await _find_session(db, session_id)
+    session = await _find_session(db, session_id, current_user)
     return ChatSessionResponse(
         id=str(session.id),
         mode=session.mode,
@@ -197,7 +255,7 @@ async def get_session(session_id: str, db: DbDep, current_user: CurrentUser):
 @router.delete("/{session_id}", status_code=204)
 async def delete_session(session_id: str, db: DbDep, current_user: CurrentUser):
     """Encerra e remove uma sessão de chat."""
-    session = await _find_session(db, session_id)
+    session = await _find_session(db, session_id, current_user)
     await db.delete(session)
     await db.flush()
 
@@ -256,30 +314,46 @@ async def _get_or_create_session(
     db: AsyncSession,
     session_id: str | None,
     mode: str,
+    current_user: User,
+    term_id: str | None = None,
 ) -> ChatSession:
-    """Retorna sessão existente ou cria uma nova com system prompt."""
+    """Retorna sessão existente (do usuário) ou cria uma nova com system prompt."""
     if session_id:
-        session = await _find_session(db, session_id)
-        return session
+        return await _find_session(db, session_id, current_user)
 
-    # Nova sessão: inicializa com system prompt
-    system_prompt = AIChatService.get_initial_system_prompt(mode)
+    # Nova sessão: inicializa com system prompt (injeta TR se term_id fornecido)
+    term_content: str | None = None
+    if term_id:
+        term = await TermRepository.get_by_id(db, term_id)
+        term_content = term.content if term else None
+
+    system_prompt = AIChatService.get_initial_system_prompt(mode, term_content=term_content)
     session = ChatSession(
         id=uuid.uuid4(),
         mode=mode,
         messages=[system_prompt],
+        user_id=current_user.id,
+        term_id=uuid.UUID(term_id) if term_id else None,
     )
     db.add(session)
     await db.flush()
-    logger.info("Nova sessão de chat criada: id=%s mode=%s", session.id, mode)
+    logger.info("Nova sessão de chat criada: id=%s mode=%s user_id=%s", session.id, mode, current_user.id)
     return session
 
 
-async def _find_session(db: AsyncSession, session_id: str) -> ChatSession:
-    """Busca sessão pelo ID ou levanta 404."""
+async def _find_session(
+    db: AsyncSession,
+    session_id: str,
+    current_user: User,
+) -> ChatSession:
+    """Busca sessão pelo ID e usuário dono, ou levanta 404 (previne IDOR)."""
     from sqlalchemy import select
+
     result = await db.execute(
-        select(ChatSession).where(ChatSession.id == session_id)
+        select(ChatSession).where(
+            ChatSession.id == session_id,
+            ChatSession.user_id == current_user.id,
+        )
     )
     session = result.scalar_one_or_none()
     if not session:

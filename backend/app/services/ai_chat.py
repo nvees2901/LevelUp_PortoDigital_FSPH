@@ -145,9 +145,13 @@ class AIChatService:
         message: str,
         mode: str,
         history: list[dict[str, str]],
+        term_content: str | None = None,
     ) -> dict[str, Any]:
         """
         Processa uma mensagem e retorna a resposta da IA com contexto RAG.
+
+        term_content: conteúdo do TR a analisar (apenas modo 'analisar').
+        É injetado no system prompt de cada chamada para garantir persistência.
 
         Returns:
             {
@@ -161,9 +165,9 @@ class AIChatService:
         rag_context = await asyncio.to_thread(cls._get_rag_context, message, mode)
 
         if settings.is_gemini_mode:
-            return await cls._gemini_response(message, mode, history, rag_context)
+            return await cls._gemini_response(message, mode, history, rag_context, term_content)
 
-        return await cls._openai_compat_response(message, mode, history, rag_context)
+        return await cls._openai_compat_response(message, mode, history, rag_context, term_content)
 
     # ------------------------------------------------------------------ #
     # Streaming
@@ -175,6 +179,7 @@ class AIChatService:
         message: str,
         mode: str,
         history: list[dict[str, str]],
+        term_content: str | None = None,
     ) -> AsyncGenerator[str, None]:
         """
         Gera tokens de forma incremental via SSE.
@@ -188,11 +193,11 @@ class AIChatService:
         rag_context = await asyncio.to_thread(cls._get_rag_context, message, mode)
 
         if settings.is_gemini_mode:
-            async for chunk in cls._gemini_stream(message, mode, history, rag_context):
+            async for chunk in cls._gemini_stream(message, mode, history, rag_context, term_content):
                 yield chunk
             return
 
-        async for chunk in cls._openai_compat_stream(message, mode, history, rag_context):
+        async for chunk in cls._openai_compat_stream(message, mode, history, rag_context, term_content):
             yield chunk
 
     @classmethod
@@ -202,13 +207,12 @@ class AIChatService:
         mode: str,
         history: list[dict[str, str]],
         rag_context: str,
+        term_content: str | None = None,
     ) -> AsyncGenerator[str, None]:
         """Streaming via provedor OpenAI-compatible (Ollama/OpenRouter/OpenAI)."""
         import json
 
-        system_content = SYSTEM_PROMPTS[mode].format(
-            rag_context=rag_context if rag_context else "(sem contexto adicional disponível)"
-        )
+        system_content = cls._build_system_content(mode, rag_context, term_content)
 
         messages = [
             {"role": "system", "content": system_content},
@@ -267,17 +271,45 @@ class AIChatService:
     # ------------------------------------------------------------------ #
 
     @classmethod
+    def _build_system_content(
+        cls,
+        mode: str,
+        rag_context: str,
+        term_content: str | None = None,
+    ) -> str:
+        """Constrói o system prompt resolvendo RAG e, opcionalmente, conteúdo do TR.
+
+        term_content é concatenado sem passar por .format() para evitar
+        KeyError com chaves literais em documentos reais ({Município}, etc.).
+        """
+        rag_text = rag_context if rag_context else "(sem contexto adicional disponível)"
+        template = SYSTEM_PROMPTS.get(mode, SYSTEM_PROMPTS["consultar"])
+
+        if mode == "analisar" and term_content:
+            tr_section = (
+                "\n\n**TERMO DE REFERÊNCIA A ANALISAR:**\n"
+                + term_content[:6000]
+                + "\n\n"
+            )
+            # Resolve {rag_context} inserindo TR + rag_text; term_content nunca
+            # passa por .format(), portanto chaves literais não causam erros.
+            resolved = template.replace("{rag_context}", tr_section + rag_text)
+        else:
+            resolved = template.replace("{rag_context}", rag_text)
+
+        return resolved
+
+    @classmethod
     async def _gemini_response(
         cls,
         message: str,
         mode: str,
         history: list[dict[str, str]],
         rag_context: str,
+        term_content: str | None = None,
     ) -> dict[str, Any]:
         """Chama Gemini via google-genai SDK."""
-        system_content = SYSTEM_PROMPTS[mode].format(
-            rag_context=rag_context if rag_context else "(sem contexto adicional disponível)"
-        )
+        system_content = cls._build_system_content(mode, rag_context, term_content)
 
         # Gemini usa formato de contents diferente do OpenAI
         contents = []
@@ -329,13 +361,12 @@ class AIChatService:
         mode: str,
         history: list[dict[str, str]],
         rag_context: str,
+        term_content: str | None = None,
     ) -> AsyncGenerator[str, None]:
         """Streaming via Gemini SDK."""
         import json
 
-        system_content = SYSTEM_PROMPTS[mode].format(
-            rag_context=rag_context if rag_context else "(sem contexto adicional disponível)"
-        )
+        system_content = cls._build_system_content(mode, rag_context, term_content)
 
         contents = []
         for msg in history:
@@ -392,11 +423,10 @@ class AIChatService:
         mode: str,
         history: list[dict[str, str]],
         rag_context: str,
+        term_content: str | None = None,
     ) -> dict[str, Any]:
         """Chama o modelo ativo via provedor OpenAI-compatible (Ollama/OpenRouter/OpenAI)."""
-        system_content = SYSTEM_PROMPTS[mode].format(
-            rag_context=rag_context if rag_context else "(sem contexto adicional disponível)"
-        )
+        system_content = cls._build_system_content(mode, rag_context, term_content)
 
         messages = [
             {"role": "system", "content": system_content},
@@ -473,8 +503,30 @@ class AIChatService:
             return ""
 
     @classmethod
-    def get_initial_system_prompt(cls, mode: str) -> dict[str, str]:
-        """Retorna a mensagem de system para inicializar uma sessão."""
+    def get_initial_system_prompt(
+        cls, mode: str, term_content: str | None = None
+    ) -> dict[str, str]:
+        """Retorna a mensagem de system para inicializar uma sessão.
+
+        Quando term_content é fornecido (modo 'analisar'), injeta o conteúdo
+        do TR no prompt antes de resolver o placeholder RAG.
+
+        Segurança: term_content pode conter chaves literais ({Município}), por
+        isso resolvemos {rag_context} via replace, não via .format(), e o
+        conteúdo do TR é concatenado depois — nunca interpolado pelo .format().
+        """
         content = SYSTEM_PROMPTS.get(mode, SYSTEM_PROMPTS["consultar"])
-        # Remove o placeholder RAG no system prompt inicial
-        return {"role": "system", "content": content.format(rag_context="")}
+
+        if mode == "analisar" and term_content:
+            # Injeta o TR antes do contexto RAG; term_content NÃO passa por .format()
+            tr_section = (
+                "\n\n**TERMO DE REFERÊNCIA A ANALISAR:**\n"
+                + term_content[:6000]
+                + "\n\n"
+            )
+            # Substitui {rag_context} por tr_section + novo placeholder
+            content = content.replace("{rag_context}", tr_section + "{rag_context}")
+
+        # Resolve {rag_context} (vazio na criação da sessão; RAG é injetado por mensagem)
+        resolved = content.replace("{rag_context}", "")
+        return {"role": "system", "content": resolved}

@@ -68,6 +68,11 @@ class ChatRequest(BaseModel):
         description="ID da sessão existente. Omita para iniciar nova conversa.",
     )
 
+    term_id: str | None = Field(
+        default=None,
+        description="ID do TR a analisar (modo analisar)",
+    )
+
     @field_validator("mode")
     @classmethod
     def validate_mode(cls, v: str) -> str:
@@ -134,3 +139,31 @@ class ChatSessionResponse(BaseModel):
     @classmethod
     def optional_uuid_to_str(cls, v: Any) -> str | None:
         return str(v) if v is not None else None
+
+
+class ChatSessionSummary(BaseModel):
+    """
+    Resumo de uma sessão para a listagem GET /api/v1/chat/sessions.
+    Não inclui o histórico completo de mensagens.
+    """
+
+    id: str
+    mode: str
+    title: str | None = None
+    message_count: int
+    generated_term_id: str | None = None
+    term_id: str | None = None
+    updated_at: str
+
+    model_config = {"from_attributes": True}
+
+    @field_validator("id", "generated_term_id", "term_id", mode="before")
+    @classmethod
+    def uuid_to_str(cls, v: Any) -> str | None:
+        return str(v) if v is not None else None
+
+
+class ChatSessionListResponse(BaseModel):
+    """Resposta de GET /api/v1/chat/sessions."""
+
+    items: list[ChatSessionSummary]
