@@ -75,7 +75,7 @@ export interface TermResponse {
   title: string;
   category: 'capacitacao' | 'aquisicao' | 'servico_tecnico' | 'outro';
   status: TermStatus;
-  setor_atual: SetorId | null;
+  setor_atual: SetorId;
   content: string | null;
   sections: Record<string, unknown> | null;
   variable_fields: string[] | null;
@@ -90,7 +90,7 @@ export interface TermSummary {
   title: string;
   category: string;
   status: TermStatus;
-  setor_atual: SetorId | null;
+  setor_atual: SetorId;
   estimated_value: number | null;
   original_filename: string | null;
   created_at: string;
@@ -181,7 +181,7 @@ export interface ChatSessionResponse {
 
 export interface ChatSessionSummary {
   id: string;
-  mode: ChatMode;
+  mode: string;
   title: string | null;
   message_count: number;
   generated_term_id: string | null;
