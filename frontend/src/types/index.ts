@@ -132,6 +132,8 @@ export interface AnalysisResponse {
 }
 
 // Chat types
+export type ChatMode = 'gerar' | 'analisar' | 'consultar';
+
 export interface ChatMessage {
   role: 'user' | 'assistant' | 'system';
   content: string;
@@ -139,7 +141,7 @@ export interface ChatMessage {
 
 export interface ChatRequest {
   message: string;
-  mode: 'gerar' | 'analisar' | 'consultar';
+  mode: ChatMode;
   session_id?: string;
 }
 
@@ -172,7 +174,7 @@ export interface DashboardStats {
 }
 
 // Navigation
-export type TelaId = 'dashboard' | 'lista' | 'detalhe' | 'chat' | 'anexar' | 'base' | 'analise';
+export type TelaId = 'dashboard' | 'lista' | 'detalhe' | 'chat' | 'base' | 'analise';
 
 export interface MensagemChat {
   de: 'ia' | 'user';

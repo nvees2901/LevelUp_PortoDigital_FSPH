@@ -19,6 +19,11 @@ export class ApiError extends Error {
   }
 }
 
+function getAuthHeader(): Record<string, string> {
+  const token = localStorage.getItem('fsph_token');
+  return token ? { 'Authorization': `Bearer ${token}` } : {};
+}
+
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
   const url = `${API_BASE}${path}`;
   const { headers: extraHeaders, ...restOptions } = options ?? {};
@@ -26,6 +31,7 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
     ...restOptions,
     headers: {
       'Content-Type': 'application/json',
+      ...getAuthHeader(),
       ...extraHeaders,
     },
   });
@@ -95,6 +101,7 @@ export async function uploadDocument(file: File): Promise<{ term: TermResponse; 
   const url = `${API_BASE}/upload`;
   const response = await fetch(url, {
     method: 'POST',
+    headers: getAuthHeader(),
     body: formData,
   });
   if (!response.ok) {
@@ -140,7 +147,7 @@ export async function streamChatMessage(data: ChatRequest, callbacks: StreamCall
   const url = `${API_BASE}/chat/stream`;
   const response = await fetch(url, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...getAuthHeader() },
     body: JSON.stringify(data),
   });
 
@@ -188,6 +195,10 @@ export async function getChatSession(id: string): Promise<ChatSessionResponse> {
 
 export async function deleteChatSession(id: string): Promise<void> {
   return request<void>(`/chat/${id}`, { method: 'DELETE' });
+}
+
+export async function finalizeChatSession(sessionId: string): Promise<{ term_id: string }> {
+  return request<{ term_id: string }>(`/chat/${sessionId}/finalize`, { method: 'POST' });
 }
 
 // --- Dashboard ---
