@@ -1,10 +1,11 @@
 """
 chat.py (route) — Chat IA com 3 modos de operação
 
-POST   /api/v1/chat              → enviar mensagem (cria sessão se necessário)
-POST   /api/v1/chat/stream       → enviar mensagem com resposta streaming (SSE)
-GET    /api/v1/chat/{session_id} → histórico da sessão
-DELETE /api/v1/chat/{session_id} → encerrar sessão
+POST   /api/v1/chat                        → enviar mensagem (cria sessão se necessário)
+POST   /api/v1/chat/stream                 → enviar mensagem com resposta streaming (SSE)
+POST   /api/v1/chat/{session_id}/finalize  → finalizar sessão e criar TR explicitamente
+GET    /api/v1/chat/{session_id}           → histórico da sessão
+DELETE /api/v1/chat/{session_id}           → encerrar sessão
 """
 
 import json
