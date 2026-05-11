@@ -192,6 +192,7 @@ class Term(Base):
     chat_sessions: Mapped[list["ChatSession"]] = relationship(  # type: ignore[name-defined]
         "ChatSession",
         back_populates="generated_term",
+        foreign_keys="[ChatSession.generated_term_id]",
         lazy="select",
     )
 
