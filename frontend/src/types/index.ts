@@ -53,22 +53,6 @@ export type TermStatus =
   | 'Aprovação DIRAF/DIGER'
   | 'Homologado';
 
-// Mock process type (matches original App.jsx)
-/** @deprecated Will be removed after all components migrate to TermResponse */
-export interface TermoMock {
-  id: string;
-  objeto: string;
-  unidade: string;
-  autor: string;
-  data: string;
-  status: string;
-  valor: string;
-  modalidade: string;
-  scoreIA: number | null;
-  checklist: Record<string, boolean>;
-  _uuid?: string;
-}
-
 // Backend API types (matching Pydantic schemas)
 export interface TermResponse {
   id: string;
