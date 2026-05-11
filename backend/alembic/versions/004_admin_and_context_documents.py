@@ -48,11 +48,11 @@ def upgrade() -> None:
         ),
         sa.Column(
             "uploaded_at",
-            sa.TIMESTAMP(timezone=True),
+            sa.String(),
             server_default=sa.text("now()"),
             nullable=False,
         ),
-        sa.Column("indexed_at",     sa.TIMESTAMP(timezone=True), nullable=True),
+        sa.Column("indexed_at",     sa.String(), nullable=True),
         sa.Column(
             "status",
             sa.VARCHAR(20),

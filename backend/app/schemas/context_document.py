@@ -23,8 +23,7 @@ class ContextDocumentResponse(BaseModel):
     chunks_count: int | None
     error_message: str | None
 
-    class Config:
-        from_attributes = True
+    model_config = {"from_attributes": True}
 
 
 class ContextDocumentList(BaseModel):
