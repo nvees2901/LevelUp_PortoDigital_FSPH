@@ -19,6 +19,7 @@ export class ApiError extends Error {
   }
 }
 
+// Must match TOKEN_KEY in AuthContext.tsx ('fsph_token')
 function getAuthHeader(): Record<string, string> {
   const token = localStorage.getItem('fsph_token');
   return token ? { 'Authorization': `Bearer ${token}` } : {};

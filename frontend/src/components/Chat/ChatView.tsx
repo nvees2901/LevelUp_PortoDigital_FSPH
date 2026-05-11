@@ -25,7 +25,7 @@ export default function ChatView({ navegar }: ChatViewProps) {
       de: 'ia',
       texto: isDemandante
         ? 'Ola! Sou o Assistente COLIC da FSPH, treinado na Lei 14.133/2021 e nos fluxos internos. Posso ajudar voce a elaborar processos de contratacao ou analisar documentos. Como posso ajudar?'
-        : `Ola, ${usuario?.nome}! Sou o Assistente COLIC. Posso responder duvidas sobre fluxos da COLIC, modalidades de contratacao, checklist documental e prazos legais. Como posso ajudar?`,
+        : `Ola, ${usuario?.nomeUsuarioLogado}! Sou o Assistente COLIC. Posso responder duvidas sobre fluxos da COLIC, modalidades de contratacao, checklist documental e prazos legais. Como posso ajudar?`,
     };
   }
 
@@ -100,7 +100,7 @@ export default function ChatView({ navegar }: ChatViewProps) {
             </p>
           </div>
           <div className="text-right text-xs">
-            <p className="font-bold">{usuario?.nome}</p>
+            <p className="font-bold">{usuario?.nomeUsuarioLogado}</p>
             <p className="text-blue-300">{usuario?.subunidade ? usuario.subunidade.split('–')[0].trim() : usuario?.descricao}</p>
           </div>
         </div>
@@ -111,6 +111,7 @@ export default function ChatView({ navegar }: ChatViewProps) {
             <button
               key={m.id}
               onClick={() => handleModeChange(m.id)}
+              disabled={analisando}
               className={`text-xs px-3 py-1 rounded-full font-medium transition border
                 ${mode === m.id
                   ? 'bg-white text-[#0a2f64] border-white'
@@ -144,12 +145,9 @@ export default function ChatView({ navegar }: ChatViewProps) {
           <div key={i} className={`flex ${m.de === 'ia' ? 'justify-start' : 'justify-end'}`}>
             <div className={`max-w-[88%] p-3 rounded-2xl text-xs leading-relaxed shadow-sm space-y-0.5
               ${m.de === 'ia'
-                ? m.isAnalise ? 'bg-blue-50 border border-blue-200 text-slate-800 rounded-tl-none'
-                : m.isConclusao ? 'bg-emerald-50 border border-emerald-200 text-slate-800 rounded-tl-none'
-                : 'bg-white border border-slate-100 text-slate-800 rounded-tl-none'
-                : m.isArquivo ? 'bg-blue-700 text-white rounded-tr-none'
+                ? 'bg-white border border-slate-100 text-slate-800 rounded-tl-none'
                 : 'text-white rounded-tr-none'}`}
-              style={m.de === 'user' && !m.isArquivo ? { backgroundColor: COLORS.primary } : {}}>
+              style={m.de === 'user' ? { backgroundColor: COLORS.primary } : {}}>
               {m.de === 'ia' ? renderTexto(m.texto) : <p>{m.texto}</p>}
             </div>
           </div>
@@ -164,7 +162,7 @@ export default function ChatView({ navegar }: ChatViewProps) {
                     style={{ animationDelay: `${i * 0.15}s` }} />
                 ))}
               </div>
-              Analisando documento com IA...
+              Aguardando resposta...
             </div>
           </div>
         )}

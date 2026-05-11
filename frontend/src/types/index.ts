@@ -179,8 +179,4 @@ export type TelaId = 'dashboard' | 'lista' | 'detalhe' | 'chat' | 'base' | 'anal
 export interface MensagemChat {
   de: 'ia' | 'user';
   texto: string;
-  isArquivo?: boolean;
-  isAnalise?: boolean;
-  isConclusao?: boolean;
-  trId?: string;
 }
