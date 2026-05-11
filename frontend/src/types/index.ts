@@ -230,6 +230,7 @@ export interface TermChecklistOut {
   auth_dirop: boolean;
   auth_diraf: boolean;
   auth_diger: boolean;
+  updated_at: string;
 }
 
 export interface WorkflowEventOut {
