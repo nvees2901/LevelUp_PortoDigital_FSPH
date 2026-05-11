@@ -375,7 +375,7 @@ class RagService:
         if file_path.suffix.lower() == ".pdf":
             text = await asyncio.to_thread(_extract_pdf_text, file_path)
         else:
-            file_bytes = file_path.read_bytes()
+            file_bytes = await asyncio.to_thread(file_path.read_bytes)
             from app.services.document import DocumentService
             text = await asyncio.to_thread(
                 DocumentService.extract_text_sync, file_bytes, filename

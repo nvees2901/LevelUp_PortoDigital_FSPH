@@ -6,6 +6,7 @@ GET    /api/v1/admin/context-documents         → listar documentos de contexto
 DELETE /api/v1/admin/context-documents/{id}    → remover documento de contexto
 """
 
+import asyncio
 import os
 import uuid
 from pathlib import Path
@@ -151,12 +152,12 @@ async def delete_context_document(doc_id: str, db: DbDep, current_user: AdminUse
 
     # Remove file
     try:
-        os.remove(doc.storage_path)
+        await asyncio.to_thread(os.remove, doc.storage_path)
     except FileNotFoundError:
         logger.warning("Arquivo não encontrado ao deletar: %s", doc.storage_path)
 
     # Remove from ChromaDB
-    RagService.remove_document_chunks(doc.filename)
+    await asyncio.to_thread(RagService.remove_document_chunks, doc.filename)
 
     # Remove from DB
     await ContextDocumentRepository.delete(db, doc)
