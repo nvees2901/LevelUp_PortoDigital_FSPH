@@ -57,9 +57,16 @@ export function statusColor(s: string): string {
 }
 
 export function modalColor(m: string): string {
-  if (m === 'Licitação')     return 'bg-blue-100 text-blue-800';
-  if (m === 'Dispensa')      return 'bg-orange-100 text-orange-800';
-  return 'bg-emerald-100 text-emerald-800';
+  // Legacy modal values
+  if (m === 'Licitação')      return 'bg-blue-100 text-blue-800';
+  if (m === 'Dispensa')       return 'bg-orange-100 text-orange-800';
+  if (m === 'Inexigibilidade') return 'bg-emerald-100 text-emerald-800';
+  // API category values
+  if (m === 'capacitacao')    return 'bg-violet-100 text-violet-800';
+  if (m === 'aquisicao')      return 'bg-blue-100 text-blue-800';
+  if (m === 'servico_tecnico') return 'bg-orange-100 text-orange-800';
+  if (m === 'outro')          return 'bg-slate-100 text-slate-700';
+  return 'bg-slate-100 text-slate-700';
 }
 
 export const DADOS_INICIAIS: TermoMock[] = [

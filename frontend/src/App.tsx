@@ -46,11 +46,11 @@ class ErrorBoundary extends Component<{ children: ReactNode }, { error: Error | 
 function AppContent() {
   const { usuario } = useAuth();
   const [telaAtual, setTelaAtual] = useState<TelaId>('dashboard');
-  const [termoSelecionado, setTermoSelecionado] = useState<TermoMock | null>(null);
+  const [termoSelecionado, setTermoSelecionado] = useState<TermoMock | string | null>(null);
 
-  const navegar = useCallback((tela: TelaId, termo?: TermoMock) => {
+  const navegar = useCallback((tela: TelaId, termo?: TermoMock | string) => {
     setTelaAtual(tela);
-    if (termo) setTermoSelecionado(termo);
+    if (termo !== undefined) setTermoSelecionado(termo);
   }, []);
 
   if (!usuario) {
@@ -64,7 +64,7 @@ function AppContent() {
       case 'lista':
         return <TermList navegar={navegar} />;
       case 'detalhe':
-        return <TermDetail termo={termoSelecionado} navegar={navegar} />;
+        return <TermDetail termo={typeof termoSelecionado === 'string' ? null : termoSelecionado} navegar={navegar} />;
       case 'chat':
         return <ChatView navegar={navegar} />;
       case 'analise':

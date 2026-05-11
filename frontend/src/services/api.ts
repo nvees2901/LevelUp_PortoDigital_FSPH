@@ -91,6 +91,10 @@ export async function deleteTerm(id: string): Promise<void> {
   return request<void>(`/terms/${id}`, { method: 'DELETE' });
 }
 
+export async function getPendentes(): Promise<TermResponse[]> {
+  return request<TermResponse[]>('/terms/pendentes');
+}
+
 export async function exportTermPdf(id: string): Promise<Blob> {
   const url = `${API_BASE}/terms/${id}/export/pdf`;
   const response = await fetch(url);
