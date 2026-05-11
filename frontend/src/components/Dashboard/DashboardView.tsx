@@ -3,7 +3,7 @@ import {
   FileText, Clock, CheckCircle, ChevronRight, AlertTriangle,
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
-import { FLUXO, ETAPAS, modalColor, statusColor } from '../../constants';
+import { ETAPAS, modalColor, statusColor } from '../../constants';
 import { getDashboardStats, getPendentes } from '../../services/api';
 import type { DashboardStats, TermResponse, TelaId } from '../../types';
 
@@ -135,31 +135,21 @@ export default function DashboardView({ navegar }: DashboardViewProps) {
         </div>
         {pendentes.length > 0 ? (
           <div className="divide-y divide-slate-100">
-            {pendentes.map(term => {
-              const podeAgir = FLUXO[term.status]?.ator === usuario.id;
-              if (!podeAgir) return null;
-              return (
-                <div key={term.id} className="p-4 hover:bg-slate-50 flex items-center justify-between gap-4 transition-colors">
-                  <div>
-                    <div className="flex items-center gap-2 mb-0.5">
-                      <p className="font-bold text-slate-800 text-sm">{term.title}</p>
-                      <span className={`text-xs px-2 py-0.5 rounded font-semibold ${modalColor(term.category)}`}>{term.category}</span>
-                    </div>
-                    <p className="text-xs text-slate-400 mt-0.5">{formatValue(term.estimated_value)}</p>
+            {pendentes.map(term => (
+              <div key={term.id} className="p-4 hover:bg-slate-50 flex items-center justify-between gap-4 transition-colors">
+                <div>
+                  <div className="flex items-center gap-2 mb-0.5">
+                    <p className="font-bold text-slate-800 text-sm">{term.title}</p>
+                    <span className={`text-xs px-2 py-0.5 rounded font-semibold ${modalColor(term.category)}`}>{term.category}</span>
                   </div>
-                  <button onClick={() => navegar('detalhe', term.id)}
-                    className="px-4 py-2 bg-[#0a2f64] text-white rounded-lg text-xs font-bold hover:bg-[#134084] transition shrink-0">
-                    Analisar
-                  </button>
+                  <p className="text-xs text-slate-400 mt-0.5">{formatValue(term.estimated_value)}</p>
                 </div>
-              );
-            })}
-            {pendentes.every(term => FLUXO[term.status]?.ator !== usuario.id) && (
-              <div className="p-10 text-center text-slate-400">
-                <CheckCircle size={36} className="mx-auto text-emerald-400 mb-2 opacity-60" />
-                <p className="text-sm">Nenhum processo aguardando sua acao.</p>
+                <button onClick={() => navegar('detalhe', term.id)}
+                  className="px-4 py-2 bg-[#0a2f64] text-white rounded-lg text-xs font-bold hover:bg-[#134084] transition shrink-0">
+                  Analisar
+                </button>
               </div>
-            )}
+            ))}
           </div>
         ) : (
           <div className="p-10 text-center text-slate-400">
