@@ -6,9 +6,10 @@ O formato é compatível com a OpenAI Chat Completions API,
 o que facilita a integração direta sem transformações extras.
 """
 
+import uuid
 from typing import Any
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 
 # ------------------------------------------------------------------ #
@@ -73,6 +74,17 @@ class ChatRequest(BaseModel):
         description="ID do TR a analisar (modo analisar)",
     )
 
+    @field_validator("session_id", "term_id", mode="before")
+    @classmethod
+    def validate_uuid_fields(cls, v: Any) -> str | None:
+        if v is None:
+            return None
+        try:
+            uuid.UUID(str(v))
+        except (ValueError, AttributeError):
+            raise ValueError("Must be a valid UUID")
+        return str(v)
+
     @field_validator("mode")
     @classmethod
     def validate_mode(cls, v: str) -> str:
@@ -80,6 +92,12 @@ class ChatRequest(BaseModel):
         if v not in valid:
             raise ValueError(f"Modo inválido. Use: {', '.join(sorted(valid))}")
         return v
+
+    @model_validator(mode="after")
+    def term_id_only_for_analisar(self) -> "ChatRequest":
+        if self.term_id and self.mode != "analisar":
+            raise ValueError("term_id is only valid when mode='analisar'")
+        return self
 
 
 # ------------------------------------------------------------------ #

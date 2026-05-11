@@ -15,6 +15,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import StreamingResponse
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
@@ -63,7 +64,7 @@ async def send_message(payload: ChatRequest, db: DbDep, current_user: CurrentUse
 
     # --- Define título na 1ª mensagem do usuário ---
     if not session.title:
-        session.title = payload.message[:80]
+        session.title = payload.message[:120]
         await db.flush()
 
     # --- Carrega conteúdo do TR vinculado (modo analisar) ---
@@ -122,7 +123,7 @@ async def stream_message(payload: ChatRequest, db: DbDep, current_user: CurrentU
 
     # --- Define título na 1ª mensagem do usuário ---
     if not session.title:
-        session.title = payload.message[:80]
+        session.title = payload.message[:120]
         await db.flush()
 
     # --- Carrega conteúdo do TR vinculado (modo analisar) ---
@@ -192,7 +193,8 @@ async def list_sessions(
     mode: str | None = None,
 ):
     """Lista sessões de chat do usuário autenticado, mais recentes primeiro."""
-    from sqlalchemy import select
+    if mode is not None and mode not in {"gerar", "analisar", "consultar"}:
+        raise HTTPException(status_code=422, detail="mode must be 'gerar', 'analisar', or 'consultar'")
 
     stmt = select(ChatSession).where(ChatSession.user_id == current_user.id)
     if mode:
@@ -347,8 +349,6 @@ async def _find_session(
     current_user: User,
 ) -> ChatSession:
     """Busca sessão pelo ID e usuário dono, ou levanta 404 (previne IDOR)."""
-    from sqlalchemy import select
-
     result = await db.execute(
         select(ChatSession).where(
             ChatSession.id == session_id,

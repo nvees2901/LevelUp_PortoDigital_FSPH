@@ -508,25 +508,8 @@ class AIChatService:
     ) -> dict[str, str]:
         """Retorna a mensagem de system para inicializar uma sessão.
 
-        Quando term_content é fornecido (modo 'analisar'), injeta o conteúdo
-        do TR no prompt antes de resolver o placeholder RAG.
-
-        Segurança: term_content pode conter chaves literais ({Município}), por
-        isso resolvemos {rag_context} via replace, não via .format(), e o
-        conteúdo do TR é concatenado depois — nunca interpolado pelo .format().
+        Delega a construção do conteúdo para _build_system_content com
+        rag_context vazio, evitando duplicação da lógica de injeção de TR.
         """
-        content = SYSTEM_PROMPTS.get(mode, SYSTEM_PROMPTS["consultar"])
-
-        if mode == "analisar" and term_content:
-            # Injeta o TR antes do contexto RAG; term_content NÃO passa por .format()
-            tr_section = (
-                "\n\n**TERMO DE REFERÊNCIA A ANALISAR:**\n"
-                + term_content[:6000]
-                + "\n\n"
-            )
-            # Substitui {rag_context} por tr_section + novo placeholder
-            content = content.replace("{rag_context}", tr_section + "{rag_context}")
-
-        # Resolve {rag_context} (vazio na criação da sessão; RAG é injetado por mensagem)
-        resolved = content.replace("{rag_context}", "")
-        return {"role": "system", "content": resolved}
+        content = cls._build_system_content(mode, rag_context="", term_content=term_content)
+        return {"role": "system", "content": content}
