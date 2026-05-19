@@ -63,6 +63,8 @@ class RagService:
         Conecta ao ChromaDB server via HTTP.
         Não carrega nenhum modelo localmente — embeddings são gerados no server.
         """
+        if not settings.RAG_ENABLED:
+            return
         if cls._setup_done:
             return
 
@@ -196,6 +198,8 @@ class RagService:
     @classmethod
     def ensure_indexed(cls) -> None:
         """Garante que os documentos foram indexados (lazy — só na primeira busca)."""
+        if not settings.RAG_ENABLED:
+            return
         if cls._indexed:
             return
         if cls._client is None:
@@ -347,6 +351,8 @@ class RagService:
     @classmethod
     def remove_document_chunks(cls, filename: str) -> None:
         """Remove chunks de um documento da coleção context_extra."""
+        if not settings.RAG_ENABLED:
+            return
         if cls._client is None:
             logger.warning("ChromaDB não inicializado — não foi possível remover chunks de '%s'", filename)
             return
@@ -359,6 +365,9 @@ class RagService:
     @classmethod
     async def index_uploaded_document(cls, storage_path: str, filename: str) -> int:
         """Indexa um documento de contexto carregado pelo admin na coleção context_extra."""
+        if not settings.RAG_ENABLED:
+            logger.info("RAG desabilitado — pulando indexação de '%s'", filename)
+            return 0
         if cls._client is None:
             await asyncio.to_thread(cls.setup)
 
@@ -390,3 +399,40 @@ class RagService:
 
         await asyncio.to_thread(cls._add_to_collection, extra_collection, chunks)
         return len(chunks)
+
+    @classmethod
+    def get_collections_stats(cls) -> list[dict]:
+        """Retorna estatísticas das 3 coleções ChromaDB (read-only e gerenciável pelo admin)."""
+        collections_meta = [
+            {
+                "name": "lei_14133",
+                "display_name": "Lei 14.133/2021",
+                "description": "Nova Lei de Licitações e Contratos Administrativos — base legal para análise de TRs",
+                "is_readonly": True,
+            },
+            {
+                "name": "termos_aprovados",
+                "display_name": "Termos de Referência Aprovados",
+                "description": "TRs pré-aprovados da FSPH usados como exemplos de referência pelo assistente IA",
+                "is_readonly": True,
+            },
+            {
+                "name": "context_extra",
+                "display_name": "Documentos Adicionais (Admin)",
+                "description": "Documentos de contexto carregados pelo administrador para enriquecer as respostas da IA",
+                "is_readonly": False,
+            },
+        ]
+
+        results = []
+        for meta in collections_meta:
+            chunks_count: int | None = None
+            if cls._client is not None:
+                try:
+                    col = cls._client.get_or_create_collection(name=meta["name"])
+                    chunks_count = col.count()
+                except Exception as e:
+                    logger.warning("Erro ao contar chunks da coleção '%s': %s", meta["name"], e)
+            results.append({**meta, "chunks_count": chunks_count})
+
+        return results
