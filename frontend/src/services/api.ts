@@ -12,6 +12,7 @@ import type {
   DashboardStats,
   ContextDocument,
   ContextDocumentList,
+  KnowledgeBaseCollectionList,
   TermChecklistOut,
   WorkflowEventOut,
 } from '../types';
@@ -264,6 +265,34 @@ export async function uploadContextDocument(file: File): Promise<ContextDocument
 
 export async function deleteContextDocument(id: string): Promise<void> {
   return request<void>(`/admin/context-documents/${id}`, { method: 'DELETE' });
+}
+
+export async function reindexContextDocument(id: string): Promise<ContextDocument> {
+  return request<ContextDocument>(`/admin/context-documents/${id}/reindex`, { method: 'POST' });
+}
+
+export async function downloadContextDocument(id: string, filename: string): Promise<void> {
+  const url = `${API_BASE}/admin/context-documents/${id}/download`;
+  const response = await fetch(url, { headers: getAuthHeader() });
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ message: 'Erro ao baixar arquivo' }));
+    throw new ApiError(response.status, error.detail || error.message);
+  }
+  const blob = await response.blob();
+  const objectUrl = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = objectUrl;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(() => {
+    document.body.removeChild(a);
+    URL.revokeObjectURL(objectUrl);
+  }, 100);
+}
+
+export async function getKnowledgeBaseCollections(): Promise<KnowledgeBaseCollectionList> {
+  return request<KnowledgeBaseCollectionList>('/admin/knowledge-base/collections');
 }
 
 // --- Chat Sessions ---

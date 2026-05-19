@@ -5,6 +5,9 @@ Usados nas respostas dos endpoints de administração:
   POST   /api/v1/admin/context-documents
   GET    /api/v1/admin/context-documents
   DELETE /api/v1/admin/context-documents/{id}
+  POST   /api/v1/admin/context-documents/{id}/reindex
+  GET    /api/v1/admin/context-documents/{id}/download
+  GET    /api/v1/admin/knowledge-base/collections
 """
 
 from pydantic import BaseModel
@@ -28,4 +31,17 @@ class ContextDocumentResponse(BaseModel):
 
 class ContextDocumentList(BaseModel):
     items: list[ContextDocumentResponse]
+    total: int
+
+
+class KnowledgeBaseCollection(BaseModel):
+    name: str
+    display_name: str
+    description: str
+    chunks_count: int | None
+    is_readonly: bool
+
+
+class KnowledgeBaseCollectionList(BaseModel):
+    items: list[KnowledgeBaseCollection]
     total: int

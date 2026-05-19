@@ -205,6 +205,19 @@ export interface ContextDocumentList {
   total: number;
 }
 
+export interface KnowledgeBaseCollection {
+  name: string;
+  display_name: string;
+  description: string;
+  chunks_count: number | null;
+  is_readonly: boolean;
+}
+
+export interface KnowledgeBaseCollectionList {
+  items: KnowledgeBaseCollection[];
+  total: number;
+}
+
 export interface TermChecklistOut {
   term_id: string;
   dfd: boolean;
@@ -229,7 +242,7 @@ export interface WorkflowEventOut {
 }
 
 // Navigation
-export type TelaId = 'dashboard' | 'lista' | 'detalhe' | 'chat' | 'base' | 'analise' | 'admin';
+export type TelaId = 'dashboard' | 'lista' | 'detalhe' | 'chat' | 'analise' | 'admin';
 
 export interface MensagemChat {
   de: 'ia' | 'user';
