@@ -177,7 +177,7 @@ export default function UploadView({ navegar }: UploadViewProps) {
                 onClick={() => navegar('lista')}
                 className="px-8 py-3 bg-[#0a2f64] text-white font-bold rounded-lg hover:bg-[#134084] shadow-md transition text-lg"
               >
-                Ver na Base de Termos
+                Ver em Processos
               </button>
               <button
                 onClick={() => { setAnalysis(null); setError(null); }}

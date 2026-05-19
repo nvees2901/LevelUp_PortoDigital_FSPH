@@ -78,3 +78,12 @@ class ContextDocumentRepository:
         doc.status = "failed"
         doc.error_message = error
         await db.flush()
+
+    @staticmethod
+    async def mark_pending(db: AsyncSession, doc: ContextDocument) -> None:
+        """Reseta o documento para pendente (usado antes de re-indexar)."""
+        doc.status = "pending"
+        doc.error_message = None
+        doc.chunks_count = None
+        doc.indexed_at = None
+        await db.flush()

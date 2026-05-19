@@ -69,8 +69,6 @@ function AppContent() {
         return <ChatView navegar={navegar} />;
       case 'analise':
         return <UploadView navegar={navegar} />;
-      case 'base':
-        return <TermList navegar={navegar} />;
       case 'admin':
         return usuario.is_admin
           ? <ContextDocumentsView navegar={navegar} />

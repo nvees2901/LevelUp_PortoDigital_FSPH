@@ -18,7 +18,6 @@ from app.repositories.term import TermRepository
 from app.schemas.analysis import (
     AnalysisRequest,
     AnalysisResponse,
-    AnalysisSummary,
     CriterionResult,
     Suggestion,
 )
@@ -76,7 +75,7 @@ async def analyze_term(payload: AnalysisRequest, db: DbDep):
     )
 
 
-@router.get("/term/{term_id}", response_model=list[AnalysisSummary])
+@router.get("/term/{term_id}", response_model=list[AnalysisResponse])
 async def get_analyses_by_term(term_id: str, db: DbDep):
     """
     Histórico de análises de um TR — mostra evolução do score ao longo do tempo.
@@ -86,7 +85,19 @@ async def get_analyses_by_term(term_id: str, db: DbDep):
         raise DocumentNotFoundError(term_id)
 
     analyses = await AnalysisRepository.list_by_term(db, term_id)
-    return [AnalysisSummary.model_validate(a) for a in analyses]
+    return [
+        AnalysisResponse(
+            id=str(a.id),
+            term_id=str(a.term_id),
+            compliance_score=a.compliance_score,
+            status=a.status,
+            criteria_results=[CriterionResult(**r) for r in a.criteria_results],
+            suggestions=[Suggestion(**s) for s in a.suggestions],
+            legal_references=a.legal_references,
+            created_at=str(a.created_at),
+        )
+        for a in analyses
+    ]
 
 
 @router.get("/{analysis_id}", response_model=AnalysisResponse)
