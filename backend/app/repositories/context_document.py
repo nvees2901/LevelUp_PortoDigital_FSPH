@@ -69,7 +69,7 @@ class ContextDocumentRepository:
         """Marca o documento como indexado com sucesso."""
         doc.status = "indexed"
         doc.chunks_count = chunks_count
-        doc.indexed_at = datetime.now(timezone.utc).isoformat()
+        doc.indexed_at = datetime.now(timezone.utc)
         await db.flush()
 
     @staticmethod

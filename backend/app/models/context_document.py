@@ -10,8 +10,9 @@ Ciclo de vida do status:
 """
 
 import uuid
+from datetime import datetime
 
-from sqlalchemy import Integer, String, Text, VARCHAR, text
+from sqlalchemy import DateTime, Integer, Text, VARCHAR, text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.sql import func
@@ -66,14 +67,14 @@ class ContextDocument(Base):
         nullable=False,
         comment="UUID do administrador que fez o upload",
     )
-    uploaded_at: Mapped[str] = mapped_column(
-        String,
+    uploaded_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
         server_default=func.now(),
         nullable=False,
         comment="Timestamp do upload (ISO 8601)",
     )
-    indexed_at: Mapped[str | None] = mapped_column(
-        String,
+    indexed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
         nullable=True,
         comment="Timestamp da indexação bem-sucedida no banco vetorial",
     )
