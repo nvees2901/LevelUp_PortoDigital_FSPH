@@ -94,6 +94,17 @@ Use os documentos abaixo como base para suas respostas.
 }
 
 
+# Keywords that indicate a complete Termo de Referência has been generated
+_TR_COMPLETE_KEYWORDS: tuple[str, ...] = (
+    "TERMO DE REFERÊNCIA",
+    "Art. 6",
+    "justificativa:",
+    "Objeto:",
+    "1. OBJETO",
+    "1. Objeto",
+)
+
+
 class AINotConfiguredError(Exception):
     """Raised when no AI provider is configured."""
     pass
@@ -253,13 +264,7 @@ class AIChatService:
             raise AIProviderError(f"Erro ao chamar provedor de IA: {e}") from e
 
         # Detecta se TR foi gerado
-        term_complete = (
-            mode == "gerar"
-            and any(kw in full_content for kw in [
-                "TERMO DE REFERÊNCIA", "Art. 6", "justificativa:",
-                "Objeto:", "1. OBJETO", "1. Objeto",
-            ])
-        )
+        term_complete = cls._detect_term_complete(mode, full_content)
 
         yield json.dumps({"done": True, "term_complete": term_complete, })
 
@@ -295,6 +300,15 @@ class AIChatService:
             resolved = template.replace("{rag_context}", rag_text)
 
         return resolved
+
+    @staticmethod
+    def _detect_term_complete(mode: str, content: str) -> bool:
+        """Retorna True se o conteúdo indica que um TR completo foi gerado.
+
+        Centraliza a detecção usada em todos os caminhos de resposta
+        (Gemini/OpenAI, streaming/não-streaming).
+        """
+        return mode == "gerar" and any(kw in content for kw in _TR_COMPLETE_KEYWORDS)
 
     @classmethod
     async def _gemini_response(
@@ -339,13 +353,7 @@ class AIChatService:
 
         content = response.text or ""
 
-        term_complete = (
-            mode == "gerar"
-            and any(kw in content for kw in [
-                "TERMO DE REFERÊNCIA", "Art. 6", "justificativa:",
-                "Objeto:", "1. OBJETO", "1. Objeto",
-            ])
-        )
+        term_complete = cls._detect_term_complete(mode, content)
 
         logger.info("Gemini response: chars=%d term_complete=%s", len(content), term_complete)
 
@@ -399,13 +407,7 @@ class AIChatService:
             logger.error("Erro Gemini stream: %s", str(e), exc_info=True)
             raise AIProviderError(f"Erro ao chamar Gemini: {e}") from e
 
-        term_complete = (
-            mode == "gerar"
-            and any(kw in full_content for kw in [
-                "TERMO DE REFERÊNCIA", "Art. 6", "justificativa:",
-                "Objeto:", "1. OBJETO", "1. Objeto",
-            ])
-        )
+        term_complete = cls._detect_term_complete(mode, full_content)
 
         yield json.dumps({"done": True, "term_complete": term_complete})
 
@@ -463,13 +465,7 @@ class AIChatService:
         content = response.choices[0].message.content or ""
 
         # Detecta se TR foi gerado (modo 'gerar')
-        term_complete = (
-            mode == "gerar"
-            and any(kw in content for kw in [
-                "TERMO DE REFERÊNCIA", "Art. 6", "justificativa:",
-                "Objeto:", "1. OBJETO", "1. Objeto",
-            ])
-        )
+        term_complete = cls._detect_term_complete(mode, content)
 
         logger.info(
             "%s response: tokens=%s term_complete=%s",
