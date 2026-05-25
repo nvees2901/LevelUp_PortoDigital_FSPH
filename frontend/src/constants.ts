@@ -3,11 +3,6 @@ import {
 } from 'lucide-react';
 import type { Setor, FluxoConfig } from './types';
 
-export const COLORS = {
-  primary: '#0a2f64',
-  primaryHover: '#134084',
-  accent: '#1a5cb0',
-} as const;
 
 export const SUBUNIDADES = [
   'HEMOSE – Hemocentro de Sergipe',

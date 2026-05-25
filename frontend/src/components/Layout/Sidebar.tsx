@@ -14,7 +14,7 @@ export default function Sidebar({ telaAtual, navegar }: SidebarProps) {
   const btn = (id: TelaId, label: string, Icon: typeof PieChart) => (
     <button key={id} onClick={() => navegar(id)}
       className={`flex items-center gap-2.5 w-full px-3 py-2.5 rounded-lg transition-all text-sm font-medium ${
-        telaAtual === id ? 'bg-[#0a2f64] text-white shadow-sm' : 'text-slate-600 hover:bg-slate-100 hover:text-[#0a2f64]'
+        telaAtual === id ? 'bg-brand-primary text-white shadow-sm' : 'text-slate-600 hover:bg-slate-100 hover:text-brand-primary'
       }`}>
       <Icon size={17} />{label}
     </button>

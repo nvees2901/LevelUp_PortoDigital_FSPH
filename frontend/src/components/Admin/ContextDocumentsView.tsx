@@ -4,7 +4,6 @@ import {
   Clock, AlertCircle, Download, AlertTriangle, ChevronDown,
   ChevronRight, Scale, FileCheck, FolderOpen, X,
 } from 'lucide-react';
-import { COLORS } from '../../constants';
 import { formatDate } from '../../utils';
 import {
   listContextDocuments,
@@ -162,7 +161,7 @@ function UploadZone({ onUploaded }: { onUploaded: () => void }) {
         onClick={() => !isUploading && fileInputRef.current?.click()}
         className={`bg-white rounded-xl border-2 border-dashed p-8 text-center transition-colors ${
           isUploading ? 'cursor-default border-slate-200' :
-          dragOver ? 'border-[#0a2f64] bg-blue-50 cursor-copy' : 'border-slate-300 hover:border-[#0a2f64] cursor-pointer'
+          dragOver ? 'border-brand-primary bg-blue-50 cursor-copy' : 'border-slate-300 hover:border-brand-primary cursor-pointer'
         }`}
       >
         <input ref={fileInputRef} type="file" accept=".pdf,.docx,.doc" multiple className="hidden" onChange={handleChange} />
@@ -175,7 +174,7 @@ function UploadZone({ onUploaded }: { onUploaded: () => void }) {
         <div className="bg-white rounded-xl border border-slate-200 divide-y divide-slate-50">
           {queue.map((item, i) => (
             <div key={i} className="flex items-center gap-3 px-4 py-2.5">
-              {item.status === 'uploading' && <RefreshCw size={14} className="text-[#0a2f64] animate-spin shrink-0" />}
+              {item.status === 'uploading' && <RefreshCw size={14} className="text-brand-primary animate-spin shrink-0" />}
               {item.status === 'done' && <CheckCircle2 size={14} className="text-emerald-500 shrink-0" />}
               {item.status === 'error' && <AlertCircle size={14} className="text-red-500 shrink-0" />}
               <span className="text-sm text-slate-700 truncate flex-1">{item.file.name}</span>
@@ -298,7 +297,7 @@ function DocumentList({
               placeholder="Buscar por nome..."
               value={search}
               onChange={e => setSearch(e.target.value)}
-              className="w-full pl-8 pr-3 py-1.5 text-sm border border-slate-200 rounded-lg focus:outline-none focus:border-[#0a2f64] transition-colors"
+              className="w-full pl-8 pr-3 py-1.5 text-sm border border-slate-200 rounded-lg focus:outline-none focus:border-brand-primary transition-colors"
             />
             {search && (
               <button onClick={() => setSearch('')} className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
@@ -313,10 +312,9 @@ function DocumentList({
                 onClick={() => setStatusFilter(p.key)}
                 className={`px-3 py-1.5 text-xs font-medium rounded-full transition-colors ${
                   statusFilter === p.key
-                    ? 'text-white'
+                    ? 'bg-brand-primary text-white'
                     : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
                 }`}
-                style={statusFilter === p.key ? { backgroundColor: COLORS.primary } : undefined}
               >
                 {p.label}
                 {p.key !== 'all' && docs.filter(d => d.status === p.key).length > 0 && (
@@ -325,7 +323,7 @@ function DocumentList({
               </button>
             ))}
           </div>
-          <button onClick={onRefresh} className="text-xs text-slate-400 hover:text-[#0a2f64] flex items-center gap-1 ml-auto shrink-0">
+          <button onClick={onRefresh} className="text-xs text-slate-400 hover:text-brand-primary flex items-center gap-1 ml-auto shrink-0">
             <RefreshCw size={12} /> Atualizar
           </button>
         </div>
@@ -343,7 +341,7 @@ function DocumentList({
       ) : filtered.length === 0 ? (
         <div className="p-8 text-center">
           <p className="text-sm text-slate-400">Nenhum documento encontrado para "{search}"</p>
-          <button onClick={() => { setSearch(''); setStatusFilter('all'); }} className="text-xs text-[#0a2f64] mt-2 hover:underline">
+          <button onClick={() => { setSearch(''); setStatusFilter('all'); }} className="text-xs text-brand-primary mt-2 hover:underline">
             Limpar filtros
           </button>
         </div>
@@ -387,7 +385,7 @@ function DocumentList({
                     <button
                       onClick={() => onDownload(doc)}
                       title="Baixar arquivo original"
-                      className="p-1.5 text-slate-400 hover:text-[#0a2f64] hover:bg-blue-50 rounded transition-colors"
+                      className="p-1.5 text-slate-400 hover:text-brand-primary hover:bg-blue-50 rounded transition-colors"
                     >
                       <Download size={14} />
                     </button>
@@ -573,7 +571,7 @@ export default function ContextDocumentsView({ navegar: _navegar }: ContextDocum
       {/* Header */}
       <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-5">
         <div className="flex items-center gap-3">
-          <div className="p-2 rounded-lg" style={{ backgroundColor: COLORS.primary }}>
+          <div className="p-2 rounded-lg bg-brand-primary">
             <Brain size={20} className="text-white" />
           </div>
           <div>

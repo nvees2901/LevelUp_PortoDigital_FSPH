@@ -1,6 +1,5 @@
 import type { FormEvent } from 'react';
 import { Lock, User } from 'lucide-react';
-import { COLORS } from '../../constants';
 import { useAuth } from '../../contexts/AuthContext';
 import FaixaCores from '../Layout/FaixaCores';
 
@@ -16,8 +15,8 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-100 flex flex-col" style={{ fontFamily: "'Segoe UI', system-ui, sans-serif" }}>
-      <div style={{ backgroundColor: COLORS.primary }} className="shadow-lg">
+    <div className="min-h-screen bg-slate-100 flex flex-col font-ui">
+      <div className="bg-brand-primary shadow-lg">
         <div className="max-w-5xl mx-auto py-5 px-6 flex flex-col items-center gap-2">
           <img
             src="/logo-fsph.png"
@@ -72,7 +71,7 @@ export default function LoginPage() {
                     required
                     autoFocus
                     placeholder="Digite seu usuário"
-                    className="w-full pl-9 pr-4 py-2.5 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#0a2f64]"
+                    className="w-full pl-9 pr-4 py-2.5 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-primary"
                   />
                 </div>
               </div>
@@ -87,15 +86,14 @@ export default function LoginPage() {
                     name="senha"
                     required
                     placeholder="••••••••"
-                    className="w-full pl-9 pr-4 py-2.5 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#0a2f64]"
+                    className="w-full pl-9 pr-4 py-2.5 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-primary"
                   />
                 </div>
               </div>
               <button
                 type="submit"
                 disabled={loading}
-                style={{ backgroundColor: COLORS.primary }}
-                className="w-full py-2.5 text-white rounded-lg font-bold text-sm hover:bg-[#134084] disabled:opacity-60 disabled:cursor-not-allowed transition-colors shadow-md mt-2"
+                className="w-full py-2.5 text-white rounded-lg font-bold text-sm bg-brand-primary hover:bg-brand-hover disabled:opacity-60 disabled:cursor-not-allowed transition-colors shadow-md mt-2"
               >
                 {loading ? 'Entrando...' : 'Acessar o Sistema'}
               </button>
