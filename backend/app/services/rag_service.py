@@ -49,9 +49,7 @@ class RagService:
     """Serviço singleton de RAG. Conecta ao ChromaDB server via HTTP."""
 
     _client: "chromadb.ClientAPI | None" = None
-    _indexed: bool = False
-    _setup_done: bool = False
-    _indexing_lock = threading.Lock()  # evita indexação simultânea
+    _indexing_lock = threading.Lock()  # evita indexação simultânea dentro do mesmo processo
 
     # ------------------------------------------------------------------ #
     # Setup
@@ -65,7 +63,7 @@ class RagService:
         """
         if not settings.RAG_ENABLED:
             return
-        if cls._setup_done:
+        if cls._client is not None:
             return
 
         import chromadb
@@ -83,7 +81,6 @@ class RagService:
 
         # Verifica conexão
         cls._client.heartbeat()
-        cls._setup_done = True
         logger.info("✓ Conectado ao ChromaDB server")
 
     @classmethod
@@ -93,14 +90,7 @@ class RagService:
         Se os documentos já estiverem indexados, não re-indexa.
         Thread-safe via lock.
         """
-        if cls._indexed:
-            return
-
         with cls._indexing_lock:
-            # Double-check após adquirir o lock
-            if cls._indexed:
-                return
-
             if cls._client is None:
                 cls.setup()
 
@@ -118,18 +108,17 @@ class RagService:
                 name="termos_aprovados",
                 metadata={"description": "TRs pré-aprovados da FSPH"},
             )
-            extra_collection = cls._client.get_or_create_collection(
+            cls._client.get_or_create_collection(
                 name="context_extra",
                 metadata={"description": "Documentos de contexto adicionais — carregados pelo admin"},
             )
 
-            # Verifica se já foi indexado
+            # Idempotência: se a coleção já tem documentos, não re-indexa
             if lei_collection.count() > 0 and tr_collection.count() > 0:
                 logger.info(
                     "✓ ChromaDB já indexado: %d chunks lei | %d chunks TRs",
                     lei_collection.count(), tr_collection.count(),
                 )
-                cls._indexed = True
                 return
 
             # Indexa os documentos
@@ -179,7 +168,6 @@ class RagService:
                 "✓ Indexação concluída: %d chunks da lei | %d chunks de TRs",
                 lei_indexed, tr_indexed,
             )
-            cls._indexed = True
 
     # ------------------------------------------------------------------ #
     # Busca semântica
@@ -199,8 +187,6 @@ class RagService:
     def ensure_indexed(cls) -> None:
         """Garante que os documentos foram indexados (lazy — só na primeira busca)."""
         if not settings.RAG_ENABLED:
-            return
-        if cls._indexed:
             return
         if cls._client is None:
             cls.setup()

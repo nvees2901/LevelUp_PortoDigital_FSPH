@@ -493,7 +493,7 @@ class AIChatService:
         try:
             from app.services.rag_service import RagService
 
-            if not RagService._indexed:
+            if RagService._client is None:
                 return ""
 
             return RagService.get_full_context(query)
