@@ -17,9 +17,6 @@ from app.utils.logging import get_logger
 
 logger = get_logger(__name__)
 
-# Timeout para chamadas à API (em segundos)
-_API_TIMEOUT = 60.0
-
 # Gemini client singleton
 _gemini_client = None
 
@@ -130,7 +127,7 @@ class AIChatService:
 
             client_kwargs: dict[str, Any] = {
                 "api_key": settings.active_api_key,
-                "timeout": _API_TIMEOUT,
+                "timeout": settings.AI_TIMEOUT_SECONDS,
             }
             if settings.active_base_url:
                 client_kwargs["base_url"] = settings.active_base_url

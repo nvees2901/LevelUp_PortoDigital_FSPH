@@ -110,6 +110,25 @@ class AnalysisResponse(BaseModel):
     def uuid_to_str(cls, v: Any) -> str:
         return str(v)
 
+    @classmethod
+    def from_orm_analysis(cls, analysis: Any) -> "AnalysisResponse":
+        """
+        Constrói um AnalysisResponse a partir de uma instância do model Analysis.
+
+        Centraliza a conversão para evitar repetição do mesmo padrão de 8 campos
+        em analysis.py (3×) e upload.py (1×).
+        """
+        return cls(
+            id=str(analysis.id),
+            term_id=str(analysis.term_id),
+            compliance_score=analysis.compliance_score,
+            status=analysis.status,
+            criteria_results=[CriterionResult(**r) for r in analysis.criteria_results],
+            suggestions=[Suggestion(**s) for s in analysis.suggestions],
+            legal_references=analysis.legal_references,
+            created_at=str(analysis.created_at),
+        )
+
 
 class AnalysisSummary(BaseModel):
     """Versão resumida para listagens de histórico de análises."""

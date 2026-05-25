@@ -28,7 +28,7 @@ from app.repositories.analysis import AnalysisRepository
 from app.repositories.checklist import ChecklistRepository
 from app.repositories.term import TermRepository
 from app.repositories.workflow_event import WorkflowEventRepository
-from app.schemas.analysis import AnalysisResponse, CriterionResult, Suggestion
+from app.schemas.analysis import AnalysisResponse
 from app.schemas.term import TermResponse
 from app.services.compliance import ComplianceService
 from app.services.document import DocumentService
@@ -134,20 +134,7 @@ async def upload_document(file: UploadFile, db: DbDep, current_user: CurrentUser
 
     # --- 10. Monta resposta ---
     term_response = TermResponse.model_validate(term)
-    analysis_response = AnalysisResponse(
-        id=str(analysis.id),
-        term_id=str(analysis.term_id),
-        compliance_score=analysis.compliance_score,
-        status=analysis.status,
-        criteria_results=[
-            CriterionResult(**r) for r in analysis.criteria_results
-        ],
-        suggestions=[
-            Suggestion(**s) for s in analysis.suggestions
-        ],
-        legal_references=analysis.legal_references,
-        created_at=str(analysis.created_at),
-    )
+    analysis_response = AnalysisResponse.from_orm_analysis(analysis)
 
     return {"term": term_response, "analysis": analysis_response}
 

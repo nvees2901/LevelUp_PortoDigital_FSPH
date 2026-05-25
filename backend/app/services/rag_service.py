@@ -41,9 +41,6 @@ def _extract_pdf_text(file_path: Path) -> str:
 
 logger = get_logger(__name__)
 
-CHUNK_SIZE = 1500      # ~375 tokens
-CHUNK_OVERLAP = 200    # overlap para não perder contexto nas bordas
-
 
 class RagService:
     """Serviço singleton de RAG. Conecta ao ChromaDB server via HTTP."""
@@ -125,8 +122,6 @@ class RagService:
             lei_indexed = 0
             tr_indexed = 0
 
-            MAX_FILE_SIZE = 50 * 1024 * 1024  # 50MB
-
             for file_path in docs_dir.iterdir():
                 if file_path.name == ".gitkeep":
                     continue
@@ -134,10 +129,10 @@ class RagService:
                 filename = file_path.name
                 file_size = file_path.stat().st_size
 
-                if file_size > MAX_FILE_SIZE:
+                if file_size > settings.MAX_FILE_SIZE_BYTES:
                     logger.warning(
                         "Pulando %s (%.1f MB) — excede limite de %d MB para indexação",
-                        filename, file_size / 1024 / 1024, MAX_FILE_SIZE // 1024 // 1024,
+                        filename, file_size / 1024 / 1024, settings.MAX_FILE_SIZE_MB,
                     )
                     continue
 
@@ -275,7 +270,7 @@ class RagService:
         chunk_idx = 0
 
         while start < len(text):
-            end = start + CHUNK_SIZE
+            end = start + settings.RAG_CHUNK_SIZE
 
             if end < len(text):
                 break_pos = text.rfind("\n\n", start, end)
@@ -292,7 +287,7 @@ class RagService:
                     "chunk_index": chunk_idx,
                 })
             chunk_idx += 1
-            start = end - CHUNK_OVERLAP
+            start = end - settings.RAG_CHUNK_OVERLAP
 
         return chunks
 
