@@ -17,7 +17,11 @@ import type {
   WorkflowEventOut,
 } from '../types';
 
-const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000/api/v1';
+export const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000/api/v1';
+
+// Single source of truth for the localStorage token key.
+// Imported by AuthContext.tsx to avoid the string being declared in two places.
+export const TOKEN_KEY = 'fsph_token';
 
 export class ApiError extends Error {
   constructor(public status: number, message: string, public detail?: string) {
@@ -26,27 +30,62 @@ export class ApiError extends Error {
   }
 }
 
-// Must match TOKEN_KEY in AuthContext.tsx ('fsph_token')
 function getAuthHeader(): Record<string, string> {
-  const token = localStorage.getItem('fsph_token');
-  return token ? { 'Authorization': `Bearer ${token}` } : {};
+  const token = localStorage.getItem(TOKEN_KEY);
+  return token ? { Authorization: `Bearer ${token}` } : {};
 }
 
-async function request<T>(path: string, options?: RequestInit): Promise<T> {
+/**
+ * Parse a failed response into an ApiError.
+ * FastAPI sends { detail: string | object }; we surface that as .message
+ * so all UI catch-blocks can read `err.message` uniformly.
+ */
+async function parseResponseError(response: Response, fallback: string): Promise<ApiError> {
+  const body = await response.json().catch(() => ({}));
+  // FastAPI uses `detail`; older paths may have sent `message`
+  const message: string =
+    typeof body.detail === 'string'
+      ? body.detail
+      : body.message || fallback;
+  return new ApiError(response.status, message, typeof body.detail === 'string' ? body.detail : undefined);
+}
+
+/**
+ * Core HTTP helper.
+ *
+ * - Automatically attaches the auth header and Content-Type: application/json
+ *   (Content-Type is omitted when the body is FormData so the browser can set
+ *    the multipart boundary).
+ * - Dispatches a custom `auth:401` DOM event on 401 responses so AuthContext
+ *   can react without a direct dependency on the service layer.
+ * - Returns `undefined` (cast to T) for 204 No Content responses.
+ */
+export async function request<T>(path: string, options?: RequestInit): Promise<T> {
   const url = `${API_BASE}${path}`;
-  const { headers: extraHeaders, ...restOptions } = options ?? {};
+  const { headers: extraHeaders, body, ...restOptions } = options ?? {};
+
+  const isFormData = body instanceof FormData;
+  const contentTypeHeader: Record<string, string> = isFormData
+    ? {}
+    : { 'Content-Type': 'application/json' };
+
   const response = await fetch(url, {
     ...restOptions,
+    body,
     headers: {
-      'Content-Type': 'application/json',
+      ...contentTypeHeader,
       ...getAuthHeader(),
-      ...extraHeaders,
+      ...(extraHeaders as Record<string, string> | undefined),
     },
   });
 
+  if (response.status === 401) {
+    window.dispatchEvent(new CustomEvent('auth:401'));
+    throw await parseResponseError(response, `Erro ${response.status}`);
+  }
+
   if (!response.ok) {
-    const error = await response.json().catch(() => ({ message: 'Erro de rede' }));
-    throw new ApiError(response.status, error.message || `Erro ${response.status}`, error.detail);
+    throw await parseResponseError(response, `Erro ${response.status}`);
   }
 
   if (response.status === 204) return undefined as T;
@@ -101,7 +140,10 @@ export async function getPendentes(): Promise<TermResponse[]> {
 export async function exportTermPdf(id: string): Promise<Blob> {
   const url = `${API_BASE}/terms/${id}/export/pdf`;
   const response = await fetch(url, { headers: getAuthHeader() });
-  if (!response.ok) throw new ApiError(response.status, 'Erro ao exportar PDF');
+  if (!response.ok) {
+    if (response.status === 401) window.dispatchEvent(new CustomEvent('auth:401'));
+    throw await parseResponseError(response, 'Erro ao exportar PDF');
+  }
   return response.blob();
 }
 
@@ -132,17 +174,10 @@ export async function devolverTermo(termId: string, observacao: string): Promise
 export async function uploadDocument(file: File): Promise<{ term: TermResponse; analysis: AnalysisResponse }> {
   const formData = new FormData();
   formData.append('file', file);
-  const url = `${API_BASE}/upload`;
-  const response = await fetch(url, {
+  return request<{ term: TermResponse; analysis: AnalysisResponse }>('/upload', {
     method: 'POST',
-    headers: getAuthHeader(),
     body: formData,
   });
-  if (!response.ok) {
-    const error = await response.json().catch(() => ({ message: 'Erro no upload' }));
-    throw new ApiError(response.status, error.message, error.detail);
-  }
-  return response.json();
 }
 
 // --- Analysis ---
@@ -186,8 +221,8 @@ export async function streamChatMessage(data: ChatRequest, callbacks: StreamCall
   });
 
   if (!response.ok) {
-    const error = await response.json().catch(() => ({ message: 'Erro de rede' }));
-    throw new ApiError(response.status, error.message || `Erro ${response.status}`, error.detail);
+    if (response.status === 401) window.dispatchEvent(new CustomEvent('auth:401'));
+    throw await parseResponseError(response, `Erro ${response.status}`);
   }
 
   const reader = response.body?.getReader();
@@ -250,17 +285,10 @@ export async function listContextDocuments(): Promise<ContextDocumentList> {
 export async function uploadContextDocument(file: File): Promise<ContextDocument> {
   const formData = new FormData();
   formData.append('file', file);
-  const url = `${API_BASE}/admin/context-documents`;
-  const response = await fetch(url, {
+  return request<ContextDocument>('/admin/context-documents', {
     method: 'POST',
-    headers: getAuthHeader(),
     body: formData,
   });
-  if (!response.ok) {
-    const error = await response.json().catch(() => ({ message: 'Erro no upload' }));
-    throw new ApiError(response.status, error.message, error.detail);
-  }
-  return response.json();
 }
 
 export async function deleteContextDocument(id: string): Promise<void> {
@@ -275,8 +303,8 @@ export async function downloadContextDocument(id: string, filename: string): Pro
   const url = `${API_BASE}/admin/context-documents/${id}/download`;
   const response = await fetch(url, { headers: getAuthHeader() });
   if (!response.ok) {
-    const error = await response.json().catch(() => ({ message: 'Erro ao baixar arquivo' }));
-    throw new ApiError(response.status, error.detail || error.message);
+    if (response.status === 401) window.dispatchEvent(new CustomEvent('auth:401'));
+    throw await parseResponseError(response, 'Erro ao baixar arquivo');
   }
   const blob = await response.blob();
   const objectUrl = URL.createObjectURL(blob);
