@@ -4,17 +4,13 @@ import { useAuth } from '../../contexts/AuthContext';
 import { ETAPAS, statusColor, modalColor, COLORS } from '../../constants';
 import { getTerms } from '../../services/api';
 import type { TermSummary, TermListResponse, TelaId } from '../../types';
+import { formatCurrency } from '../../utils';
 
 interface TermListProps {
   navegar: (tela: TelaId, termoId?: string) => void;
 }
 
 const CATEGORIES = ['capacitacao', 'aquisicao', 'servico_tecnico', 'outro'] as const;
-
-function formatCurrency(value: number | null): string {
-  if (value == null) return '—';
-  return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
-}
 
 export default function TermList({ navegar }: TermListProps) {
   const { usuario } = useAuth();

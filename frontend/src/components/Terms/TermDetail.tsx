@@ -6,6 +6,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import {
   FLUXO, ETAPAS, CHECKLIST, SETORES, COLORS, statusColor, modalColor,
 } from '../../constants';
+import { formatCurrency, formatDate, scoreColor } from '../../utils';
 import {
   getTerm,
   getAnalysesByTerm,
@@ -127,17 +128,7 @@ export default function TermDetail({ termId, navegar }: TermDetailProps) {
 
   const latestAnalysis = analyses.length > 0 ? analyses[0] : null;
   const score = latestAnalysis?.compliance_score ?? null;
-  const scoreColor =
-    score == null ? 'text-slate-300'
-    : score >= 80 ? 'text-emerald-400'
-    : score >= 50 ? 'text-amber-400'
-    : 'text-red-400';
-
-  const formatValue = (v: number | null) =>
-    v != null ? `R$ ${v.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}` : '—';
-
-  const formatDate = (iso: string) =>
-    new Date(iso).toLocaleDateString('pt-BR');
+  const scoreColorClass = score == null ? 'text-slate-300' : scoreColor(score);
 
   // --- Handlers ---
   const handlePdf = async () => {
@@ -246,7 +237,7 @@ export default function TermDetail({ termId, navegar }: TermDetailProps) {
               {[
                 { l: 'Status', v: term.status },
                 { l: 'Categoria', v: term.category },
-                { l: 'Valor Estimado', v: formatValue(term.estimated_value) },
+                { l: 'Valor Estimado', v: formatCurrency(term.estimated_value) },
                 { l: 'Criado em', v: formatDate(term.created_at) },
               ].map(item => (
                 <div key={item.l}>
@@ -342,7 +333,7 @@ export default function TermDetail({ termId, navegar }: TermDetailProps) {
               <span className="font-bold text-sm flex items-center gap-1.5">
                 <Bot size={15} /> Análise IA
               </span>
-              <span className={`text-xl font-black ${scoreColor}`}>
+              <span className={`text-xl font-black ${scoreColorClass}`}>
                 {score != null ? `${score}%` : '--'}
               </span>
             </div>

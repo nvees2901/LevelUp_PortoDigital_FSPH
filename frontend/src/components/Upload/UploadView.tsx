@@ -5,6 +5,7 @@ import {
 } from 'lucide-react';
 import { uploadDocument } from '../../services/api';
 import type { TelaId, AnalysisResponse, CriterionResult } from '../../types';
+import { scoreColor } from '../../utils';
 
 interface UploadViewProps {
   navegar: (tela: TelaId) => void;
@@ -14,12 +15,6 @@ function statusIcon(status: string) {
   if (status === 'aprovado') return <CheckCircle size={18} className="text-emerald-500 shrink-0" />;
   if (status === 'alerta') return <AlertTriangle size={18} className="text-amber-500 shrink-0" />;
   return <XCircle size={18} className="text-red-500 shrink-0" />;
-}
-
-function scoreColor(score: number): string {
-  if (score >= 80) return 'text-emerald-600';
-  if (score >= 50) return 'text-amber-500';
-  return 'text-red-500';
 }
 
 export default function UploadView({ navegar }: UploadViewProps) {

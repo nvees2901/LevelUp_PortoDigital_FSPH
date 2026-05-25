@@ -5,6 +5,7 @@ import {
   ChevronRight, Scale, FileCheck, FolderOpen, X,
 } from 'lucide-react';
 import { COLORS } from '../../constants';
+import { formatDate } from '../../utils';
 import {
   listContextDocuments,
   uploadContextDocument,
@@ -379,7 +380,7 @@ function DocumentList({
                 <td className="px-4 py-3 text-slate-500 text-xs">{formatBytes(doc.size_bytes)}</td>
                 <td className="px-4 py-3"><StatusBadge status={doc.status} /></td>
                 <td className="px-4 py-3 text-slate-400 text-xs">
-                  {new Date(doc.uploaded_at).toLocaleDateString('pt-BR')}
+                  {formatDate(doc.uploaded_at)}
                 </td>
                 <td className="px-4 py-3">
                   <div className="flex items-center gap-1 justify-end">

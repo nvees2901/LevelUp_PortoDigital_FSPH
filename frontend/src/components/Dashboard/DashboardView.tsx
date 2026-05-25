@@ -6,6 +6,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { ETAPAS, modalColor, statusColor } from '../../constants';
 import { getDashboardStats, getPendentes } from '../../services/api';
 import type { DashboardStats, TermResponse, TelaId } from '../../types';
+import { formatCurrency, formatDate } from '../../utils';
 
 interface DashboardViewProps {
   navegar: (tela: TelaId, termoId?: string) => void;
@@ -85,9 +86,6 @@ export default function DashboardView({ navegar }: DashboardViewProps) {
     { label: 'Homologados',         val: stats.por_status['Homologado'] ?? 0,          cor: 'text-emerald-600',  bg: 'bg-emerald-50', Icon: CheckCircle },
   ];
 
-  const formatValue = (v: number | null) =>
-    v != null ? `R$ ${v.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}` : '—';
-
   return (
     <div className="space-y-5 max-w-6xl mx-auto">
       {/* Cards */}
@@ -142,7 +140,7 @@ export default function DashboardView({ navegar }: DashboardViewProps) {
                     <p className="font-bold text-slate-800 text-sm">{term.title}</p>
                     <span className={`text-xs px-2 py-0.5 rounded font-semibold ${modalColor(term.category)}`}>{term.category}</span>
                   </div>
-                  <p className="text-xs text-slate-400 mt-0.5">{formatValue(term.estimated_value)}</p>
+                  <p className="text-xs text-slate-400 mt-0.5">{formatCurrency(term.estimated_value)}</p>
                 </div>
                 <button onClick={() => navegar('detalhe', term.id)}
                   className="px-4 py-2 bg-[#0a2f64] text-white rounded-lg text-xs font-bold hover:bg-[#134084] transition shrink-0">
@@ -192,7 +190,7 @@ export default function DashboardView({ navegar }: DashboardViewProps) {
                       <span className={`px-2 py-0.5 rounded border font-semibold ${statusColor(term.status)}`}>{term.status}</span>
                     </td>
                     <td className="px-4 py-3 text-slate-500">
-                      {new Date(term.created_at).toLocaleDateString('pt-BR')}
+                      {formatDate(term.created_at)}
                     </td>
                   </tr>
                 ))}

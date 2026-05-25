@@ -4,20 +4,16 @@ import { useAuth } from '../../contexts/AuthContext';
 import { COLORS } from '../../constants';
 import { sendChatMessage, finalizeChatSession, listChatSessions, getChatSession, uploadDocument } from '../../services/api';
 import type { TelaId, MensagemChat, ChatMode, ChatSessionSummary } from '../../types';
+import { renderTexto } from '../../utils';
 
 interface ChatViewProps {
   navegar: (tela: TelaId) => void;
 }
 
-function escapeHtml(s: string) {
-  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-}
-
-function renderTexto(txt: string) {
-  return txt.split('\n').map((line, i) => {
-    const formatted = escapeHtml(line).replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
-    return <p key={i} className={line === '' ? 'h-1' : ''} dangerouslySetInnerHTML={{ __html: formatted }} />;
-  });
+function renderMensagem(txt: string) {
+  return txt.split('\n').map((line, i) => (
+    <p key={i} className={line === '' ? 'h-1' : ''} dangerouslySetInnerHTML={{ __html: renderTexto(line) }} />
+  ));
 }
 
 export default function ChatView({ navegar }: ChatViewProps) {
@@ -256,7 +252,7 @@ export default function ChatView({ navegar }: ChatViewProps) {
                   ? 'bg-white border border-slate-100 text-slate-800 rounded-tl-none'
                   : 'text-white rounded-tr-none'}`}
                 style={m.de === 'user' ? { backgroundColor: COLORS.primary } : {}}>
-                {m.de === 'ia' ? renderTexto(m.texto) : <p>{m.texto}</p>}
+                {m.de === 'ia' ? renderMensagem(m.texto) : <p>{m.texto}</p>}
               </div>
             </div>
           ))}
