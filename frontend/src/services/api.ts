@@ -12,6 +12,7 @@ import type {
   DashboardStats,
   ContextDocument,
   ContextDocumentList,
+  ContextDocumentPreviewResponse,
   KnowledgeBaseCollectionList,
   TermChecklistOut,
   WorkflowEventOut,
@@ -344,6 +345,18 @@ export async function createTextContextDocument(
 
 export async function getKnowledgeBaseCollections(): Promise<KnowledgeBaseCollectionList> {
   return request<KnowledgeBaseCollectionList>('/admin/knowledge-base/collections');
+}
+
+export async function previewContextDocument(id: string): Promise<ContextDocumentPreviewResponse> {
+  return request<ContextDocumentPreviewResponse>(`/admin/context-documents/${id}/preview`);
+}
+
+export async function fetchContextDocumentBlob(id: string): Promise<Blob> {
+  const response = await fetch(`${API_BASE}/admin/context-documents/${id}/download`, {
+    headers: getAuthHeader(),
+  });
+  if (!response.ok) throw new Error('Falha ao carregar o arquivo.');
+  return response.blob();
 }
 
 // --- Chat Sessions ---
