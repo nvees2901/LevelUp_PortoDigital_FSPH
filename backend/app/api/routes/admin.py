@@ -36,6 +36,7 @@ from app.schemas.context_document import (
     KnowledgeBaseCollection,
     KnowledgeBaseCollectionList,
 )
+from app.services.document import DocumentService
 from app.services.rag_service import RagService
 from app.utils.logging import get_logger
 
@@ -305,11 +306,10 @@ async def preview_context_document(doc_id: str, db: DbDep, current_user: AdminUs
 
     if doc.mime_type == "text/plain":
         text = await asyncio.to_thread(
-            lambda: Path(doc.storage_path).read_text(encoding="utf-8")
+            Path(doc.storage_path).read_text, "utf-8"
         )
     else:
         file_bytes = await asyncio.to_thread(Path(doc.storage_path).read_bytes)
-        from app.services.document import DocumentService
         text = await asyncio.to_thread(
             DocumentService.extract_text_sync, file_bytes, doc.filename
         )
