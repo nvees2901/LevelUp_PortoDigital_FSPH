@@ -1,0 +1,44 @@
+name: Deploy backend to Cloud Run
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v1
+        with:
+          service_account_key: ${{ secrets.GCP_SA_KEY }}
+          project_id: ${{ secrets.GCP_PROJECT }}
+
+      - name: Configure Docker for gcr
+        run: gcloud auth configure-docker --quiet
+
+      - name: Build Docker image
+        run: |
+          docker build -t gcr.io/${{ secrets.GCP_PROJECT }}/fsph-backend:${{ github.sha }} backend
+
+      - name: Push image to GCR
+        run: |
+          docker push gcr.io/${{ secrets.GCP_PROJECT }}/fsph-backend:${{ github.sha }}
+
+      - name: Deploy to Cloud Run
+        env:
+          IMAGE: gcr.io/${{ secrets.GCP_PROJECT }}/fsph-backend:${{ github.sha }}
+        run: |
+          gcloud run deploy ${{ secrets.CLOUD_RUN_SERVICE }} \
+            --image "$IMAGE" \
+            --platform managed \
+            --region ${{ secrets.CLOUD_RUN_REGION }} \
+            --allow-unauthenticated \
+            --set-env-vars "ENVIRONMENT=production,DATABASE_URL=${{ secrets.DATABASE_URL }},SECRET_KEY=${{ secrets.SECRET_KEY }}"
+
+      - name: (optional) Run migrations (see DEPLOY_BACKEND.md)
+        run: echo "If you want automated migrations, enable Cloud Run jobs or run alembic manually in a one-off job."
