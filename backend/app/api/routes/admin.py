@@ -4,8 +4,11 @@ admin.py (route) — Endpoints de gerenciamento para administradores
 POST   /api/v1/admin/context-documents              → upload de documento de contexto
 GET    /api/v1/admin/context-documents              → listar documentos de contexto
 DELETE /api/v1/admin/context-documents/{id}        → remover documento de contexto
-POST   /api/v1/admin/context-documents/{id}/reindex → re-indexar documento (inclusive falhos)
-GET    /api/v1/admin/context-documents/{id}/download → baixar arquivo original
+POST   /api/v1/admin/context-documents/{id}/reindex    → re-indexar documento (inclusive falhos)
+POST   /api/v1/admin/context-documents/{id}/deactivate → desativar documento (remove chunks do ChromaDB)
+POST   /api/v1/admin/context-documents/{id}/activate   → ativar/re-indexar documento desativado
+GET    /api/v1/admin/context-documents/{id}/download   → baixar arquivo original
+POST   /api/v1/admin/context-documents/text        → adicionar texto puro como contexto RAG
 GET    /api/v1/admin/knowledge-base/collections    → estatísticas das coleções ChromaDB
 """
 
@@ -13,10 +16,10 @@ import asyncio
 import os
 import uuid
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, Literal
 
 import aiofiles
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, UploadFile, status
+from fastapi import APIRouter, BackgroundTasks, Depends, Form, HTTPException, UploadFile, status
 from fastapi.responses import FileResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -42,7 +45,29 @@ DbDep = Annotated[AsyncSession, Depends(get_db)]
 ALLOWED_EXTENSIONS = {".pdf", ".docx", ".doc"}
 
 
-async def _run_indexing_task(doc_id: str, storage_path: str, filename: str) -> None:
+def _doc_to_response(doc) -> ContextDocumentResponse:
+    """Converte um ContextDocument ORM em ContextDocumentResponse."""
+    return ContextDocumentResponse(
+        id=str(doc.id),
+        filename=doc.filename,
+        original_filename=doc.original_filename,
+        mime_type=doc.mime_type,
+        size_bytes=doc.size_bytes,
+        uploaded_by_id=str(doc.uploaded_by_id) if doc.uploaded_by_id is not None else None,
+        uploaded_at=str(doc.uploaded_at),
+        indexed_at=str(doc.indexed_at) if doc.indexed_at is not None else None,
+        status=doc.status,
+        chunks_count=doc.chunks_count,
+        error_message=doc.error_message,
+        is_active=doc.is_active,
+        collection=doc.collection,
+        is_seed=doc.is_seed,
+    )
+
+
+async def _run_indexing_task(
+    doc_id: str, storage_path: str, filename: str, collection: str = "context_extra"
+) -> None:
     """Indexa um documento no ChromaDB e atualiza o status no banco."""
     from app.core.database import AsyncSessionLocal
 
@@ -51,10 +76,10 @@ async def _run_indexing_task(doc_id: str, storage_path: str, filename: str) -> N
         if not bg_doc:
             return
         try:
-            chunks = await RagService.index_uploaded_document(storage_path, filename)
+            chunks = await RagService.index_uploaded_document(storage_path, filename, collection)
             await ContextDocumentRepository.mark_indexed(bg_db, bg_doc, chunks)
             await bg_db.commit()
-            logger.info("Documento indexado: %s (%d chunks)", filename, chunks)
+            logger.info("Documento indexado: %s em %s (%d chunks)", filename, collection, chunks)
         except Exception as e:
             await ContextDocumentRepository.mark_failed(bg_db, bg_doc, str(e))
             await bg_db.commit()
@@ -67,6 +92,10 @@ async def upload_context_document(
     background_tasks: BackgroundTasks,
     db: DbDep,
     current_user: AdminUser,
+    collection: Annotated[
+        Literal["context_extra", "lei_14133", "termos_aprovados"],
+        Form(),
+    ] = "context_extra",
 ):
     """Upload de documento de contexto para a base de conhecimento da IA."""
     filename = file.filename or "documento"
@@ -101,26 +130,17 @@ async def upload_context_document(
         "size_bytes": size_bytes,
         "storage_path": storage_path,
         "uploaded_by_id": current_user.id,
+        "collection": collection,
         "status": "pending",
     })
     await db.commit()
     await db.refresh(doc)
 
-    background_tasks.add_task(_run_indexing_task, str(doc.id), doc.storage_path, doc.filename)
-
-    return ContextDocumentResponse(
-        id=str(doc.id),
-        filename=doc.filename,
-        original_filename=doc.original_filename,
-        mime_type=doc.mime_type,
-        size_bytes=doc.size_bytes,
-        uploaded_by_id=str(doc.uploaded_by_id),
-        uploaded_at=str(doc.uploaded_at),
-        indexed_at=str(doc.indexed_at) if doc.indexed_at is not None else None,
-        status=doc.status,
-        chunks_count=doc.chunks_count,
-        error_message=doc.error_message,
+    background_tasks.add_task(
+        _run_indexing_task, str(doc.id), doc.storage_path, doc.filename, doc.collection
     )
+
+    return _doc_to_response(doc)
 
 
 @router.get("/context-documents", response_model=ContextDocumentList)
@@ -128,22 +148,7 @@ async def list_context_documents(db: DbDep, current_user: AdminUser):
     """Lista todos os documentos de contexto."""
     docs = await ContextDocumentRepository.list_all(db)
     return ContextDocumentList(
-        items=[
-            ContextDocumentResponse(
-                id=str(d.id),
-                filename=d.filename,
-                original_filename=d.original_filename,
-                mime_type=d.mime_type,
-                size_bytes=d.size_bytes,
-                uploaded_by_id=str(d.uploaded_by_id),
-                uploaded_at=str(d.uploaded_at),
-                indexed_at=str(d.indexed_at) if d.indexed_at is not None else None,
-                status=d.status,
-                chunks_count=d.chunks_count,
-                error_message=d.error_message,
-            )
-            for d in docs
-        ],
+        items=[_doc_to_response(d) for d in docs],
         total=len(docs),
     )
 
@@ -155,12 +160,13 @@ async def delete_context_document(doc_id: str, db: DbDep, current_user: AdminUse
     if not doc:
         raise HTTPException(status_code=404, detail="Documento não encontrado.")
 
-    try:
-        await asyncio.to_thread(os.remove, doc.storage_path)
-    except FileNotFoundError:
-        logger.warning("Arquivo não encontrado ao deletar: %s", doc.storage_path)
+    if not doc.is_seed:
+        try:
+            await asyncio.to_thread(os.remove, doc.storage_path)
+        except FileNotFoundError:
+            logger.warning("Arquivo não encontrado ao deletar: %s", doc.storage_path)
 
-    await asyncio.to_thread(RagService.remove_document_chunks, doc.filename)
+    await asyncio.to_thread(RagService.remove_document_chunks, doc.filename, doc.collection)
 
     await ContextDocumentRepository.delete(db, doc)
     await db.commit()
@@ -178,6 +184,12 @@ async def reindex_context_document(
     if not doc:
         raise HTTPException(status_code=404, detail="Documento não encontrado.")
 
+    if not doc.is_active:
+        raise HTTPException(
+            status_code=409,
+            detail="Documento inativo não pode ser re-indexado. Reative-o primeiro.",
+        )
+
     if not Path(doc.storage_path).exists():
         raise HTTPException(
             status_code=410,
@@ -188,21 +200,11 @@ async def reindex_context_document(
     await db.commit()
     await db.refresh(doc)
 
-    background_tasks.add_task(_run_indexing_task, str(doc.id), doc.storage_path, doc.filename)
-
-    return ContextDocumentResponse(
-        id=str(doc.id),
-        filename=doc.filename,
-        original_filename=doc.original_filename,
-        mime_type=doc.mime_type,
-        size_bytes=doc.size_bytes,
-        uploaded_by_id=str(doc.uploaded_by_id),
-        uploaded_at=str(doc.uploaded_at),
-        indexed_at=str(doc.indexed_at) if doc.indexed_at is not None else None,
-        status=doc.status,
-        chunks_count=doc.chunks_count,
-        error_message=doc.error_message,
+    background_tasks.add_task(
+        _run_indexing_task, str(doc.id), doc.storage_path, doc.filename, doc.collection
     )
+
+    return _doc_to_response(doc)
 
 
 @router.get("/context-documents/{doc_id}/download")
@@ -223,6 +225,61 @@ async def download_context_document(doc_id: str, db: DbDep, current_user: AdminU
         filename=doc.original_filename,
         media_type=doc.mime_type,
     )
+
+
+@router.post("/context-documents/{doc_id}/deactivate", response_model=ContextDocumentResponse)
+async def deactivate_context_document(doc_id: str, db: DbDep, current_user: AdminUser):
+    """Desativa um TR indexado: remove seus chunks do ChromaDB sem excluir o arquivo."""
+    doc = await ContextDocumentRepository.get_by_id(db, doc_id)
+    if not doc:
+        raise HTTPException(status_code=404, detail="Documento não encontrado.")
+    if not doc.is_active:
+        raise HTTPException(status_code=409, detail="Documento já está inativo.")
+    if doc.status != "indexed":
+        raise HTTPException(
+            status_code=422,
+            detail="Apenas documentos com status 'indexed' podem ser desativados.",
+        )
+
+    await asyncio.to_thread(RagService.remove_document_chunks, doc.filename, doc.collection)
+    await ContextDocumentRepository.set_active(db, doc, False)
+    doc.chunks_count = 0
+    await db.flush()
+    await db.commit()
+    await db.refresh(doc)
+
+    return _doc_to_response(doc)
+
+
+@router.post("/context-documents/{doc_id}/activate", response_model=ContextDocumentResponse)
+async def activate_context_document(
+    doc_id: str,
+    background_tasks: BackgroundTasks,
+    db: DbDep,
+    current_user: AdminUser,
+):
+    """Reativa um TR desativado: re-indexa seus chunks no ChromaDB."""
+    doc = await ContextDocumentRepository.get_by_id(db, doc_id)
+    if not doc:
+        raise HTTPException(status_code=404, detail="Documento não encontrado.")
+    if doc.is_active:
+        raise HTTPException(status_code=409, detail="Documento já está ativo.")
+    if not Path(doc.storage_path).exists():
+        raise HTTPException(
+            status_code=410,
+            detail="Arquivo físico não encontrado no storage. Remova e faça upload novamente.",
+        )
+
+    await ContextDocumentRepository.set_active(db, doc, True)
+    await ContextDocumentRepository.mark_pending(db, doc)
+    await db.commit()
+    await db.refresh(doc)
+
+    background_tasks.add_task(
+        _run_indexing_task, str(doc.id), doc.storage_path, doc.filename, doc.collection
+    )
+
+    return _doc_to_response(doc)
 
 
 @router.get("/knowledge-base/collections", response_model=KnowledgeBaseCollectionList)

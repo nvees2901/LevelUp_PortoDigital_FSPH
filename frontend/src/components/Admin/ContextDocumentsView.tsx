@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import {
   Upload, FileText, Trash2, RefreshCw, Brain, CheckCircle2,
   Clock, AlertCircle, Download, AlertTriangle, ChevronDown,
-  ChevronRight, Scale, FileCheck, FolderOpen, X,
+  ChevronRight, Scale, FileCheck, FolderOpen, X, Power, PowerOff,
 } from 'lucide-react';
 import { formatDate } from '../../utils';
 import {
@@ -12,6 +12,8 @@ import {
   reindexContextDocument,
   downloadContextDocument,
   getKnowledgeBaseCollections,
+  activateContextDocument,
+  deactivateContextDocument,
 } from '../../services/api';
 import type { ContextDocument, KnowledgeBaseCollection, TelaId } from '../../types';
 
@@ -107,27 +109,51 @@ interface QueueItem {
   error?: string;
 }
 
+const COLLECTION_OPTIONS = [
+  { value: 'context_extra', label: 'Documentos Adicionais' },
+  { value: 'lei_14133', label: 'Lei 14.133/2021' },
+  { value: 'termos_aprovados', label: 'TRs Aprovados FSPH' },
+] as const;
+
+type CollectionKey = typeof COLLECTION_OPTIONS[number]['value'];
+
 function UploadZone({ onUploaded }: { onUploaded: () => void }) {
   const [dragOver, setDragOver] = useState(false);
   const [queue, setQueue] = useState<QueueItem[]>([]);
+  const [collection, setCollection] = useState<CollectionKey>('context_extra');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  const MAX_FILE_SIZE_MB = 20;
+
   const processFiles = async (files: File[]) => {
-    const valid = files.filter(f => {
-      const ext = f.name.split('.').pop()?.toLowerCase();
-      return ['pdf', 'docx', 'doc'].includes(ext || '');
-    });
+    const isValidExt = (f: File) => ['pdf', 'docx', 'doc'].includes(f.name.split('.').pop()?.toLowerCase() || '');
+    const typeInvalid = files.filter(f => !isValidExt(f));
+    const typeValid = files.filter(isValidExt);
+    const tooLarge = typeValid.filter(f => f.size > MAX_FILE_SIZE_MB * 1024 * 1024);
+    const valid = typeValid.filter(f => f.size <= MAX_FILE_SIZE_MB * 1024 * 1024);
 
-    if (valid.length === 0) return;
+    const initial: QueueItem[] = [
+      ...typeInvalid.map(f => ({ file: f, status: 'error' as const, error: 'Formato não suportado. Use PDF, DOCX ou DOC.' })),
+      ...tooLarge.map(f => ({ file: f, status: 'error' as const, error: `Arquivo excede ${MAX_FILE_SIZE_MB} MB.` })),
+      ...valid.map(f => ({ file: f, status: 'uploading' as const })),
+    ];
 
-    const initial: QueueItem[] = valid.map(f => ({ file: f, status: 'uploading' }));
+    if (initial.length === 0) return;
+
     setQueue(initial);
 
-    const results = await Promise.allSettled(valid.map(f => uploadContextDocument(f)));
+    if (valid.length === 0) {
+      setTimeout(() => setQueue([]), 4000);
+      return;
+    }
+
+    const errOffset = typeInvalid.length + tooLarge.length;
+    const results = await Promise.allSettled(valid.map(f => uploadContextDocument(f, collection)));
 
     setQueue(prev =>
       prev.map((item, i) => {
-        const result = results[i];
+        if (i < errOffset) return item;
+        const result = results[i - errOffset];
         if (result.status === 'fulfilled') return { ...item, status: 'done' };
         const msg = result.reason instanceof Error ? result.reason.message : 'Erro no upload';
         return { ...item, status: 'error', error: msg };
@@ -154,6 +180,19 @@ function UploadZone({ onUploaded }: { onUploaded: () => void }) {
 
   return (
     <div className="space-y-2">
+      <div className="bg-white rounded-xl border border-slate-200 px-4 py-3 flex items-center gap-3">
+        <label className="text-xs font-medium text-slate-500 shrink-0">Base de destino:</label>
+        <select
+          value={collection}
+          onChange={e => setCollection(e.target.value as CollectionKey)}
+          disabled={isUploading}
+          className="flex-1 text-sm border border-slate-200 rounded-lg px-2 py-1.5 focus:outline-none focus:border-brand-primary transition-colors disabled:opacity-50"
+        >
+          {COLLECTION_OPTIONS.map(o => (
+            <option key={o.value} value={o.value}>{o.label}</option>
+          ))}
+        </select>
+      </div>
       <div
         onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
         onDragLeave={() => setDragOver(false)}
@@ -250,6 +289,18 @@ function DeleteConfirmModal({
 
 // ─── DocumentList ─────────────────────────────────────────────────────────────
 
+const COLLECTION_ICONS: Record<string, React.ReactNode> = {
+  lei_14133: <Scale size={14} className="text-blue-600 shrink-0" />,
+  termos_aprovados: <FileCheck size={14} className="text-violet-600 shrink-0" />,
+  context_extra: <FolderOpen size={14} className="text-slate-400 shrink-0" />,
+};
+
+const COLLECTION_LABELS: Record<string, string> = {
+  lei_14133: 'Lei 14.133',
+  termos_aprovados: 'TRs Aprovados',
+  context_extra: 'Adicionais',
+};
+
 type StatusFilter = 'all' | 'indexed' | 'pending' | 'failed';
 
 function DocumentList({
@@ -259,6 +310,7 @@ function DocumentList({
   onDelete,
   onRetry,
   onDownload,
+  onToggleActive,
 }: {
   docs: ContextDocument[];
   loading: boolean;
@@ -266,6 +318,7 @@ function DocumentList({
   onDelete: (doc: ContextDocument) => void;
   onRetry: (doc: ContextDocument) => void;
   onDownload: (doc: ContextDocument) => void;
+  onToggleActive: (doc: ContextDocument) => void;
 }) {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
@@ -350,6 +403,7 @@ function DocumentList({
           <thead className="bg-slate-50 border-b border-slate-100">
             <tr>
               <th className="text-left px-4 py-2.5 text-xs text-slate-500 font-semibold">Arquivo</th>
+              <th className="text-left px-4 py-2.5 text-xs text-slate-500 font-semibold">Base</th>
               <th className="text-left px-4 py-2.5 text-xs text-slate-500 font-semibold">Tamanho</th>
               <th className="text-left px-4 py-2.5 text-xs text-slate-500 font-semibold">Status</th>
               <th className="text-left px-4 py-2.5 text-xs text-slate-500 font-semibold">Data</th>
@@ -358,14 +412,19 @@ function DocumentList({
           </thead>
           <tbody>
             {filtered.map(doc => (
-              <tr key={doc.id} className="border-b border-slate-50 hover:bg-slate-50 transition-colors">
+              <tr key={doc.id} className={`border-b border-slate-50 hover:bg-slate-50 transition-colors ${!doc.is_active ? 'opacity-60' : ''}`}>
                 <td className="px-4 py-3">
                   <div className="flex items-center gap-2">
                     <FileText size={14} className="text-slate-400 shrink-0" />
                     <span className="text-slate-700 truncate max-w-xs" title={doc.original_filename}>
                       {doc.original_filename}
                     </span>
-                    {doc.chunks_count !== null && (
+                    {doc.is_seed && (
+                      <span className="ml-2 inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-700 shrink-0">
+                        Seed
+                      </span>
+                    )}
+                    {doc.chunks_count !== null && doc.chunks_count > 0 && (
                       <span className="text-xs text-slate-400 shrink-0">({doc.chunks_count} chunks)</span>
                     )}
                   </div>
@@ -375,8 +434,21 @@ function DocumentList({
                     </p>
                   )}
                 </td>
+                <td className="px-4 py-3">
+                  <div className="flex items-center gap-1.5">
+                    {COLLECTION_ICONS[doc.collection] ?? <FolderOpen size={14} className="text-slate-400 shrink-0" />}
+                    <span className="text-xs text-slate-500">{COLLECTION_LABELS[doc.collection] ?? doc.collection}</span>
+                  </div>
+                </td>
                 <td className="px-4 py-3 text-slate-500 text-xs">{formatBytes(doc.size_bytes)}</td>
-                <td className="px-4 py-3"><StatusBadge status={doc.status} /></td>
+                <td className="px-4 py-3">
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <StatusBadge status={doc.status} />
+                    {!doc.is_active && (
+                      <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-slate-200 text-slate-500">Inativo</span>
+                    )}
+                  </div>
+                </td>
                 <td className="px-4 py-3 text-slate-400 text-xs">
                   {formatDate(doc.uploaded_at)}
                 </td>
@@ -389,18 +461,38 @@ function DocumentList({
                     >
                       <Download size={14} />
                     </button>
-                    <button
-                      onClick={() => onRetry(doc)}
-                      disabled={doc.status === 'pending'}
-                      title={doc.status === 'pending' ? 'Em indexação...' : 'Re-indexar documento'}
-                      className={`p-1.5 rounded transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${
-                        doc.status === 'failed'
-                          ? 'text-amber-500 hover:text-amber-700 hover:bg-amber-50'
-                          : 'text-slate-400 hover:text-slate-600 hover:bg-slate-100'
-                      }`}
-                    >
-                      <RefreshCw size={14} />
-                    </button>
+                    {doc.is_active && (
+                      <button
+                        onClick={() => onRetry(doc)}
+                        disabled={doc.status === 'pending'}
+                        title={doc.status === 'pending' ? 'Em indexação...' : 'Re-indexar documento'}
+                        className={`p-1.5 rounded transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${
+                          doc.status === 'failed'
+                            ? 'text-amber-500 hover:text-amber-700 hover:bg-amber-50'
+                            : 'text-slate-400 hover:text-slate-600 hover:bg-slate-100'
+                        }`}
+                      >
+                        <RefreshCw size={14} />
+                      </button>
+                    )}
+                    {(doc.is_active && doc.status === 'indexed') && (
+                      <button
+                        onClick={() => onToggleActive(doc)}
+                        title="Desativar TR (remove chunks do ChromaDB)"
+                        className="p-1.5 text-slate-400 hover:text-amber-600 hover:bg-amber-50 rounded transition-colors"
+                      >
+                        <PowerOff size={14} />
+                      </button>
+                    )}
+                    {!doc.is_active && (
+                      <button
+                        onClick={() => onToggleActive(doc)}
+                        title="Reativar TR (re-indexa no ChromaDB)"
+                        className="p-1.5 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 rounded transition-colors"
+                      >
+                        <Power size={14} />
+                      </button>
+                    )}
                     <button
                       onClick={() => onDelete(doc)}
                       title="Remover documento"
@@ -420,12 +512,6 @@ function DocumentList({
 }
 
 // ─── FixedCollections ─────────────────────────────────────────────────────────
-
-const COLLECTION_ICONS: Record<string, React.ReactNode> = {
-  lei_14133: <Scale size={16} className="text-blue-600 shrink-0" />,
-  termos_aprovados: <FileCheck size={16} className="text-violet-600 shrink-0" />,
-  context_extra: <FolderOpen size={16} className="text-slate-500 shrink-0" />,
-};
 
 function FixedCollections() {
   const [expanded, setExpanded] = useState(false);
@@ -469,13 +555,10 @@ function FixedCollections() {
             <div className="divide-y divide-slate-50">
               {collections.map(col => (
                 <div key={col.name} className="flex items-start gap-3 px-5 py-4">
-                  {COLLECTION_ICONS[col.name] ?? <FolderOpen size={16} className="text-slate-500 shrink-0" />}
+                  {COLLECTION_ICONS[col.name] ?? <FolderOpen size={14} className="text-slate-500 shrink-0" />}
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
                       <span className="text-sm font-medium text-slate-800">{col.display_name}</span>
-                      {col.is_readonly && (
-                        <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-blue-50 text-blue-600">Somente leitura</span>
-                      )}
                     </div>
                     <p className="text-xs text-slate-500 mt-0.5">{col.description}</p>
                   </div>
@@ -566,6 +649,20 @@ export default function ContextDocumentsView({ navegar: _navegar }: ContextDocum
     }
   };
 
+  const handleToggleActive = async (doc: ContextDocument) => {
+    setError(null);
+    setDocs(prev => prev.map(d => d.id === doc.id ? { ...d, status: 'pending' } : d));
+    try {
+      const updated = doc.is_active
+        ? await deactivateContextDocument(doc.id)
+        : await activateContextDocument(doc.id);
+      setDocs(prev => prev.map(d => d.id === doc.id ? updated : d));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Erro ao alterar estado do documento');
+      await fetchDocs();
+    }
+  };
+
   return (
     <div className="max-w-6xl mx-auto space-y-5">
       {/* Header */}
@@ -603,6 +700,7 @@ export default function ContextDocumentsView({ navegar: _navegar }: ContextDocum
         onDelete={setDeleteTarget}
         onRetry={handleRetry}
         onDownload={handleDownload}
+        onToggleActive={handleToggleActive}
       />
 
       {/* Fixed collections */}
