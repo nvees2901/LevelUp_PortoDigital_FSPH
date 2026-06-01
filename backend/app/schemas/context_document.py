@@ -34,10 +34,20 @@ class ContextDocumentResponse(BaseModel):
 
     model_config = {"from_attributes": True}
 
-    @field_validator("uploaded_at", "indexed_at", mode="before")
+    @field_validator("uploaded_at", mode="before")
     @classmethod
-    def datetime_to_isoformat(cls, v: Any) -> str | None:
+    def uploaded_at_to_isoformat(cls, v: Any) -> str:
         """Converte datetime do SQLAlchemy para string ISO-8601."""
+        if isinstance(v, datetime):
+            return v.isoformat()
+        if isinstance(v, str):
+            return v
+        return str(v)
+
+    @field_validator("indexed_at", mode="before")
+    @classmethod
+    def indexed_at_to_isoformat(cls, v: Any) -> str | None:
+        """Converte datetime do SQLAlchemy para string ISO-8601. Retorna None para campo nullable."""
         if v is None:
             return None
         if isinstance(v, datetime):
