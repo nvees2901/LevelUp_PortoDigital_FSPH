@@ -1,6 +1,7 @@
 import uuid
+from datetime import datetime
 
-from sqlalchemy import Boolean, String, VARCHAR, Enum, text
+from sqlalchemy import Boolean, DateTime, VARCHAR, Enum, text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.sql import func
@@ -60,13 +61,13 @@ class User(Base):
         server_default=text("false"),
         comment="Papel administrativo — pode gerenciar documentos de contexto da IA",
     )
-    created_at: Mapped[str] = mapped_column(
-        String,
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
         server_default=func.now(),
         nullable=False,
     )
-    updated_at: Mapped[str] = mapped_column(
-        String,
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
         server_default=func.now(),
         onupdate=func.now(),
         nullable=False,

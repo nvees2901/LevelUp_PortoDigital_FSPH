@@ -10,8 +10,9 @@ Ciclo de vida do status:
 """
 
 import uuid
+from datetime import datetime
 
-from sqlalchemy import Integer, String, Text, VARCHAR, text
+from sqlalchemy import Boolean, DateTime, Integer, Text, VARCHAR, text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.sql import func
@@ -61,19 +62,19 @@ class ContextDocument(Base):
         nullable=False,
         comment="Caminho relativo ao CONTEXT_DOCS_DIR onde o arquivo está armazenado",
     )
-    uploaded_by_id: Mapped[uuid.UUID] = mapped_column(
+    uploaded_by_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True),
-        nullable=False,
-        comment="UUID do administrador que fez o upload",
+        nullable=True,
+        comment="UUID do administrador que fez o upload (nulo para seeds importados)",
     )
-    uploaded_at: Mapped[str] = mapped_column(
-        String,
+    uploaded_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
         server_default=func.now(),
         nullable=False,
         comment="Timestamp do upload (ISO 8601)",
     )
-    indexed_at: Mapped[str | None] = mapped_column(
-        String,
+    indexed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
         nullable=True,
         comment="Timestamp da indexação bem-sucedida no banco vetorial",
     )
@@ -93,6 +94,27 @@ class ContextDocument(Base):
         Text(),
         nullable=True,
         comment="Mensagem de erro se status=failed",
+    )
+    is_active: Mapped[bool] = mapped_column(
+        Boolean(),
+        nullable=False,
+        default=True,
+        server_default=text("true"),
+        comment="Se False, chunks removidos da coleção (TR desativado pelo admin)",
+    )
+    collection: Mapped[str] = mapped_column(
+        VARCHAR(40),
+        nullable=False,
+        default="context_extra",
+        server_default=text("'context_extra'"),
+        comment="Coleção ChromaDB alvo: context_extra | lei_14133 | termos_aprovados",
+    )
+    is_seed: Mapped[bool] = mapped_column(
+        Boolean(),
+        nullable=False,
+        default=False,
+        server_default=text("false"),
+        comment="True para documentos importados de documents/ — arquivo físico não pode ser excluído",
     )
 
     def __repr__(self) -> str:

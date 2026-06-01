@@ -5,6 +5,7 @@ Representa o resultado da análise de um TR contra os 10 critérios
 da Lei 14.133/2021, conforme definido no CONTEXT.md (seção 6.2).
 """
 
+from datetime import datetime
 from decimal import Decimal
 from typing import Any
 
@@ -110,6 +111,35 @@ class AnalysisResponse(BaseModel):
     def uuid_to_str(cls, v: Any) -> str:
         return str(v)
 
+    @field_validator("created_at", mode="before")
+    @classmethod
+    def datetime_to_isoformat(cls, v: Any) -> str:
+        """Converte datetime do SQLAlchemy para string ISO-8601."""
+        if isinstance(v, datetime):
+            return v.isoformat()
+        if isinstance(v, str):
+            return v
+        return str(v)
+
+    @classmethod
+    def from_orm_analysis(cls, analysis: Any) -> "AnalysisResponse":
+        """
+        Constrói um AnalysisResponse a partir de uma instância do model Analysis.
+
+        Centraliza a conversão para evitar repetição do mesmo padrão de 8 campos
+        em analysis.py (3×) e upload.py (1×).
+        """
+        return cls(
+            id=str(analysis.id),
+            term_id=str(analysis.term_id),
+            compliance_score=analysis.compliance_score,
+            status=analysis.status,
+            criteria_results=[CriterionResult(**r) for r in analysis.criteria_results],
+            suggestions=[Suggestion(**s) for s in analysis.suggestions],
+            legal_references=analysis.legal_references,
+            created_at=str(analysis.created_at),
+        )
+
 
 class AnalysisSummary(BaseModel):
     """Versão resumida para listagens de histórico de análises."""
@@ -125,6 +155,16 @@ class AnalysisSummary(BaseModel):
     @field_validator("id", "term_id", mode="before")
     @classmethod
     def uuid_to_str(cls, v: Any) -> str:
+        return str(v)
+
+    @field_validator("created_at", mode="before")
+    @classmethod
+    def datetime_to_isoformat(cls, v: Any) -> str:
+        """Converte datetime do SQLAlchemy para string ISO-8601."""
+        if isinstance(v, datetime):
+            return v.isoformat()
+        if isinstance(v, str):
+            return v
         return str(v)
 
 

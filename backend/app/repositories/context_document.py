@@ -50,6 +50,17 @@ class ContextDocumentRepository:
         )
         return result.scalar_one_or_none()
 
+    @staticmethod
+    async def get_seed_by_filename(db: AsyncSession, filename: str) -> ContextDocument | None:
+        """Retorna o seed existente pelo nome do arquivo, ou None."""
+        result = await db.execute(
+            select(ContextDocument).where(
+                ContextDocument.filename == filename,
+                ContextDocument.is_seed == True,  # noqa: E712
+            )
+        )
+        return result.scalar_one_or_none()
+
     # ------------------------------------------------------------------ #
     # Exclusão
     # ------------------------------------------------------------------ #
@@ -69,7 +80,7 @@ class ContextDocumentRepository:
         """Marca o documento como indexado com sucesso."""
         doc.status = "indexed"
         doc.chunks_count = chunks_count
-        doc.indexed_at = datetime.now(timezone.utc).isoformat()
+        doc.indexed_at = datetime.now(timezone.utc)
         await db.flush()
 
     @staticmethod
@@ -86,4 +97,10 @@ class ContextDocumentRepository:
         doc.error_message = None
         doc.chunks_count = None
         doc.indexed_at = None
+        await db.flush()
+
+    @staticmethod
+    async def set_active(db: AsyncSession, doc: ContextDocument, active: bool) -> None:
+        """Atualiza o flag is_active do documento."""
+        doc.is_active = active
         await db.flush()

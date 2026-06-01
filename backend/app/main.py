@@ -20,6 +20,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 from app.api.routes import admin, analysis, auth, chat, dashboard, terms, upload, workflow
 from app.core.config import settings
@@ -32,6 +33,57 @@ from app.utils.logging import get_logger, setup_logging
 # ------------------------------------------------------------------ #
 setup_logging()
 logger = get_logger(__name__)
+
+
+# ------------------------------------------------------------------ #
+# Middleware catch-all — garante headers CORS em respostas 500
+# ------------------------------------------------------------------ #
+# O handler global de Exception registrado via add_exception_handler()
+# é processado pelo ServerErrorMiddleware, que fica ACIMA (mais externo)
+# do CORSMiddleware na pilha. Isso faz com que respostas 500 geradas por
+# exceções não previstas saiam sem os headers Access-Control-Allow-*.
+#
+# Solução: middleware ASGI puro que captura a exceção DENTRO da pilha,
+# antes que a resposta chegue ao CORSMiddleware (que fica mais externo).
+# A ordem de add_middleware (LIFO para "mais externo"):
+#   1. CatchAllMiddleware (primeiro) → fica mais INTERNO
+#   2. CORSMiddleware (último)       → fica mais EXTERNO
+# Fluxo: req → CORSMiddleware → CatchAllMiddleware → rotas
+#          res ← CORSMiddleware (adiciona ACAO) ← CatchAllMiddleware(500)
+#
+# Por que ASGI puro e não BaseHTTPMiddleware?
+#   BaseHTTPMiddleware acumula o corpo inteiro antes de repassar, o que
+#   quebra endpoints SSE (chat streaming). O ASGI middleware delega
+#   diretamente ao app interno sem buffering — streaming funciona normalmente.
+
+class CatchAllMiddleware:
+    """
+    Middleware ASGI puro que captura qualquer Exception não tratada e
+    retorna JSON 500 padronizado. Por estar mais interno que o
+    CORSMiddleware, a resposta 500 ainda atravessa o CORS que adiciona
+    Access-Control-Allow-Origin. Não interfere com respostas streaming
+    (SSE/PDF) pois não faz buffering do corpo.
+    """
+
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+        try:
+            await self.app(scope, receive, send)
+        except Exception:
+            logger.error("Erro não tratado (catch-all middleware)", exc_info=True)
+            response = JSONResponse(
+                status_code=500,
+                content={
+                    "error": "INTERNAL_SERVER_ERROR",
+                    "message": "Ocorreu um erro interno. Por favor, tente novamente.",
+                },
+            )
+            await response(scope, receive, send)
 
 
 # ------------------------------------------------------------------ #
@@ -74,6 +126,32 @@ async def lifespan(app: FastAPI):
             str(e),
         )
 
+    # Bootstrap do admin em dev (evita 401 no primeiro boot)
+    if settings.ENVIRONMENT != "production":
+        try:
+            from app.core.database import AsyncSessionLocal
+            from app.repositories.user import UserRepository
+            from app.services.auth import hash_password
+
+            async with AsyncSessionLocal() as admin_db:
+                existing = await UserRepository.get_by_matricula(admin_db, "ADMIN-001")
+                if existing is None:
+                    await UserRepository.create(admin_db, {
+                        "matricula": "ADMIN-001",
+                        "nome": "Administrador FSPH",
+                        "senha_hash": hash_password("senha123"),
+                        "setor_id": "colic",
+                        "subunidade": None,
+                        "is_admin": True,
+                        "ativo": True,
+                    })
+                    await admin_db.commit()
+                    logger.info("✓ Admin dev criado: ADMIN-001 / senha123")
+                else:
+                    logger.info("✓ Admin dev já existe: ADMIN-001")
+        except Exception as e:
+            logger.warning("Bootstrap admin falhou (banco pode estar indisponível): %s", e)
+
     # RAG (ChromaDB server via Docker) — indexação em background no startup
     if settings.RAG_ENABLED:
         logger.info(
@@ -85,12 +163,15 @@ async def lifespan(app: FastAPI):
 
         async def _index_in_background() -> None:
             try:
+                from app.core.database import AsyncSessionLocal
                 from app.services.rag_service import RagService
                 await asyncio.to_thread(RagService.setup)
                 await asyncio.to_thread(RagService.index_documents)
-                logger.info("✓ RAG: indexação em background concluída")
+                async with AsyncSessionLocal() as seed_db:
+                    await RagService.import_seed_documents(seed_db)
+                logger.info("✓ RAG: inicialização em background concluída")
             except Exception as e:
-                logger.warning("RAG: indexação em background falhou (será tentada na primeira busca): %s", e)
+                logger.warning("RAG: inicialização em background falhou (será tentada na primeira busca): %s", e)
 
         asyncio.create_task(_index_in_background())
     else:
@@ -136,11 +217,21 @@ usam dados simulados — sem custo e sem necessidade de conta OpenAI.
 
 
 # ------------------------------------------------------------------ #
-# CORS — Cross-Origin Resource Sharing
+# Middleware stack — ordem importa (add_middleware é LIFO para "externo")
 # ------------------------------------------------------------------ #
-# Permite que o frontend Next.js (porta 3000) chame esta API
-# Em produção, substitua por origens específicas no .env
+# O último add_middleware fica mais EXTERNO (vê a req primeiro, res por último).
+# Queremos: req → CORS → CatchAll → rotas
+#           res ← CORS (adiciona headers) ← CatchAll (retorna 500 se errar)
+#
+# Portanto:
+#   1. CatchAllMiddleware PRIMEIRO → fica mais INTERNO
+#   2. CORSMiddleware DEPOIS       → fica mais EXTERNO
 
+# 1. Inner: captura Exception antes que a resposta chegue ao CORS
+app.add_middleware(CatchAllMiddleware)
+
+# 2. Outer: adiciona headers Access-Control-Allow-* em toda resposta
+#    (incluindo a JSONResponse 500 gerada pelo CatchAllMiddleware acima)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.CORS_ORIGINS,

@@ -18,6 +18,7 @@ Padrão de nomenclatura:
   - *ListResponse → resposta paginada de listagens (GET com filtros)
 """
 
+from datetime import datetime
 from decimal import Decimal
 from typing import Any
 
@@ -162,6 +163,16 @@ class TermResponse(BaseModel):
             return None
         return str(v)
 
+    @field_validator("created_at", "updated_at", mode="before")
+    @classmethod
+    def datetime_to_isoformat(cls, v: Any) -> str:
+        """Converte datetime do SQLAlchemy para string ISO-8601."""
+        if isinstance(v, datetime):
+            return v.isoformat()
+        if isinstance(v, str):
+            return v
+        return str(v)
+
 
 class TermSummary(BaseModel):
     """
@@ -183,6 +194,16 @@ class TermSummary(BaseModel):
     @field_validator("id", mode="before")
     @classmethod
     def uuid_to_str(cls, v: Any) -> str:
+        return str(v)
+
+    @field_validator("created_at", mode="before")
+    @classmethod
+    def datetime_to_isoformat(cls, v: Any) -> str:
+        """Converte datetime do SQLAlchemy para string ISO-8601."""
+        if isinstance(v, datetime):
+            return v.isoformat()
+        if isinstance(v, str):
+            return v
         return str(v)
 
 

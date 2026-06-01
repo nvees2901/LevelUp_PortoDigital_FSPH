@@ -31,7 +31,7 @@ class ErrorBoundary extends Component<{ children: ReactNode }, { error: Error | 
             </pre>
             <button
               onClick={() => { localStorage.clear(); window.location.reload(); }}
-              className="px-4 py-2 bg-[#0a2f64] text-white rounded-lg hover:bg-[#134084]"
+              className="px-4 py-2 bg-brand-primary text-white rounded-lg hover:bg-brand-hover"
             >
               Limpar dados e recarregar
             </button>
@@ -79,7 +79,7 @@ function AppContent() {
   };
 
   return (
-    <div className="flex flex-col h-screen bg-slate-100 overflow-hidden" style={{ fontFamily: "'Segoe UI', system-ui, sans-serif" }}>
+    <div className="flex flex-col h-screen bg-slate-100 overflow-hidden font-ui">
       <Header />
       <div className="flex flex-1 overflow-hidden">
         <Sidebar telaAtual={telaAtual} navegar={navegar} />

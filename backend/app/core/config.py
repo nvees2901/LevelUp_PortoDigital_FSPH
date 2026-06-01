@@ -97,6 +97,17 @@ class Settings(BaseSettings):
     CONTEXT_DOC_MAX_SIZE_MB: int = 20               # limite por arquivo de contexto
 
     # ------------------------------------------------------------------ #
+    # RAG — chunking
+    # ------------------------------------------------------------------ #
+    RAG_CHUNK_SIZE: int = 1500    # tamanho de cada chunk (~375 tokens)
+    RAG_CHUNK_OVERLAP: int = 200  # overlap para não perder contexto nas bordas
+
+    # ------------------------------------------------------------------ #
+    # IA — timeout de chamadas HTTP
+    # ------------------------------------------------------------------ #
+    AI_TIMEOUT_SECONDS: float = 60.0  # timeout para chamadas à API de IA (segundos)
+
+    # ------------------------------------------------------------------ #
     # Propriedade calculada — não vem do .env
     # ------------------------------------------------------------------ #
     @property

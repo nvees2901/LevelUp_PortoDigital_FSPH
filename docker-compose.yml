@@ -12,7 +12,8 @@ services:
 
   backend:
     build: ./backend
-    mem_limit: 2g
+    mem_limit: 4g
+    restart: unless-stopped
     ports:
       - "8000:8000"
     environment:
@@ -27,6 +28,7 @@ services:
       - CHROMA_PORT=8000
     volumes:
       - ./documents:/app/documents:ro
+      - context_docs_data:/app/context_documents
     depends_on:
       postgres:
         condition: service_healthy
@@ -102,3 +104,4 @@ volumes:
   postgres_data:
   chroma_data:
   ollama_data:
+  context_docs_data:
