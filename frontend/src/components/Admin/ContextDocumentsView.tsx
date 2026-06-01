@@ -242,6 +242,14 @@ function TextInputZone({ onAdded }: { onAdded: () => void }) {
     e.preventDefault();
     setError(null);
     setSuccess(false);
+
+    const MAX_BYTES = 20 * 1024 * 1024; // 20 MB
+    const contentBytes = new Blob([content]).size;
+    if (contentBytes > MAX_BYTES) {
+      setError(`Texto muito grande: ${(contentBytes / 1024 / 1024).toFixed(1)} MB. Máximo: 20 MB.`);
+      return;
+    }
+
     setLoading(true);
     try {
       await createTextContextDocument(title, content, collection);

@@ -334,7 +334,7 @@ export async function downloadContextDocument(id: string, filename: string): Pro
 export async function createTextContextDocument(
   title: string,
   content: string,
-  collection: string = 'context_extra',
+  collection: 'context_extra' | 'lei_14133' | 'termos_aprovados' = 'context_extra',
 ): Promise<ContextDocument> {
   return request<ContextDocument>('/admin/context-documents/text', {
     method: 'POST',

@@ -170,10 +170,22 @@ async def create_text_context_document(
     storage_dir.mkdir(parents=True, exist_ok=True)
     storage_path = str(storage_dir / unique_filename)
 
-    async with aiofiles.open(storage_path, "w", encoding="utf-8") as f:
-        await f.write(payload.content)
-
     size_bytes = len(payload.content.encode("utf-8"))
+    max_bytes = settings.CONTEXT_DOC_MAX_SIZE_MB * 1024 * 1024
+    if size_bytes > max_bytes:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"Texto muito grande: {size_bytes / 1024 / 1024:.1f} MB. Máximo: {settings.CONTEXT_DOC_MAX_SIZE_MB} MB",
+        )
+
+    try:
+        async with aiofiles.open(storage_path, "w", encoding="utf-8") as f:
+            await f.write(payload.content)
+    except OSError as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Falha ao salvar arquivo: {e}",
+        )
 
     doc = await ContextDocumentRepository.create(db, {
         "filename": unique_filename,
