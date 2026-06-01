@@ -126,6 +126,32 @@ async def lifespan(app: FastAPI):
             str(e),
         )
 
+    # Bootstrap do admin em dev (evita 401 no primeiro boot)
+    if settings.ENVIRONMENT != "production":
+        try:
+            from app.core.database import AsyncSessionLocal
+            from app.repositories.user import UserRepository
+            from app.services.auth import hash_password
+
+            async with AsyncSessionLocal() as admin_db:
+                existing = await UserRepository.get_by_matricula(admin_db, "ADMIN-001")
+                if existing is None:
+                    await UserRepository.create(admin_db, {
+                        "matricula": "ADMIN-001",
+                        "nome": "Administrador FSPH",
+                        "senha_hash": hash_password("senha123"),
+                        "setor_id": "colic",
+                        "subunidade": None,
+                        "is_admin": True,
+                        "ativo": True,
+                    })
+                    await admin_db.commit()
+                    logger.info("✓ Admin dev criado: ADMIN-001 / senha123")
+                else:
+                    logger.info("✓ Admin dev já existe: ADMIN-001")
+        except Exception as e:
+            logger.warning("Bootstrap admin falhou (banco pode estar indisponível): %s", e)
+
     # RAG (ChromaDB server via Docker) — indexação em background no startup
     if settings.RAG_ENABLED:
         logger.info(
