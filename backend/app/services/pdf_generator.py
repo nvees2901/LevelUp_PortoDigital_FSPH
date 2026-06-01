@@ -201,9 +201,9 @@ class PDFGeneratorService:
     def _build_header(styles: dict) -> list:
         """Cria o cabeçalho institucional da FSPH."""
         return [
-            Paragraph("GOVERNO DO ESTADO DE PERNAMBUCO", styles["institution"]),
+            Paragraph("GOVERNO DO ESTADO DE SERGIPE", styles["institution"]),
             Paragraph(
-                "FUNDAÇÃO DE SAÚDE PÚBLICA DE PERNAMBUCO — FSPH",
+                "FUNDAÇÃO DE SAÚDE PARREIRAS HORTA — FSPH",
                 styles["institution_name"],
             ),
             Paragraph(
