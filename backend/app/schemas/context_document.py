@@ -72,6 +72,14 @@ class ContextDocumentTextCreate(BaseModel):
     )
 
 
+class ContextDocumentPreview(BaseModel):
+    """Resposta da prévia de um documento de contexto."""
+    type: Literal["pdf", "text"]
+    text: str | None = None
+    truncated: bool = False
+    download_url: str | None = None
+
+
 class KnowledgeBaseCollection(BaseModel):
     name: str
     display_name: str

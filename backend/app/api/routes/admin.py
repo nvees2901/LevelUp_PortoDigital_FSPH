@@ -30,6 +30,7 @@ from app.core.security import AdminUser
 from app.repositories.context_document import ContextDocumentRepository
 from app.schemas.context_document import (
     ContextDocumentList,
+    ContextDocumentPreview,
     ContextDocumentResponse,
     ContextDocumentTextCreate,
     KnowledgeBaseCollection,
@@ -278,6 +279,47 @@ async def download_context_document(doc_id: str, db: DbDep, current_user: AdminU
         path=doc.storage_path,
         filename=doc.original_filename,
         media_type=doc.mime_type,
+    )
+
+
+@router.get("/context-documents/{doc_id}/preview", response_model=ContextDocumentPreview)
+async def preview_context_document(doc_id: str, db: DbDep, current_user: AdminUser):
+    """Retorna prévia do conteúdo de um documento de contexto."""
+    doc = await ContextDocumentRepository.get_by_id(db, doc_id)
+    if not doc:
+        raise HTTPException(status_code=404, detail="Documento não encontrado.")
+
+    if not Path(doc.storage_path).exists():
+        raise HTTPException(
+            status_code=410,
+            detail="Arquivo físico não encontrado no storage.",
+        )
+
+    if doc.mime_type == "application/pdf":
+        return ContextDocumentPreview(
+            type="pdf",
+            download_url=f"/api/v1/admin/context-documents/{doc_id}/download",
+        )
+
+    PREVIEW_LIMIT = 3000
+
+    if doc.mime_type == "text/plain":
+        text = await asyncio.to_thread(
+            lambda: Path(doc.storage_path).read_text(encoding="utf-8")
+        )
+    else:
+        file_bytes = await asyncio.to_thread(Path(doc.storage_path).read_bytes)
+        from app.services.document import DocumentService
+        text = await asyncio.to_thread(
+            DocumentService.extract_text_sync, file_bytes, doc.filename
+        )
+        del file_bytes
+
+    truncated = len(text) > PREVIEW_LIMIT
+    return ContextDocumentPreview(
+        type="text",
+        text=text[:PREVIEW_LIMIT] if truncated else text,
+        truncated=truncated,
     )
 
 
