@@ -5,6 +5,7 @@ import {
 } from 'lucide-react';
 import { uploadDocument } from '../../services/api';
 import type { TelaId, AnalysisResponse, CriterionResult } from '../../types';
+import { scoreColor } from '../../utils';
 
 interface UploadViewProps {
   navegar: (tela: TelaId) => void;
@@ -14,12 +15,6 @@ function statusIcon(status: string) {
   if (status === 'aprovado') return <CheckCircle size={18} className="text-emerald-500 shrink-0" />;
   if (status === 'alerta') return <AlertTriangle size={18} className="text-amber-500 shrink-0" />;
   return <XCircle size={18} className="text-red-500 shrink-0" />;
-}
-
-function scoreColor(score: number): string {
-  if (score >= 80) return 'text-emerald-600';
-  if (score >= 50) return 'text-amber-500';
-  return 'text-red-500';
 }
 
 export default function UploadView({ navegar }: UploadViewProps) {
@@ -64,10 +59,10 @@ export default function UploadView({ navegar }: UploadViewProps) {
       <div className="bg-white p-10 rounded-xl shadow-sm border border-slate-200 text-center">
         {!analisando && !analysis && !error ? (
           <>
-            <div className="w-24 h-24 bg-blue-50 text-[#0a2f64] rounded-full flex items-center justify-center mx-auto mb-6 border-4 border-white shadow-sm">
+            <div className="w-24 h-24 bg-blue-50 text-brand-primary rounded-full flex items-center justify-center mx-auto mb-6 border-4 border-white shadow-sm">
               <Upload size={40} />
             </div>
-            <h2 className="text-3xl font-bold text-[#0a2f64] mb-3">Validação de Documento</h2>
+            <h2 className="text-3xl font-bold text-brand-primary mb-3">Validação de Documento</h2>
             <p className="text-slate-600 mb-8 max-w-lg mx-auto font-medium">
               Faça o upload do seu Termo de Referência (.doc, .docx ou .pdf). O motor de NLP extrairá o texto e validará contra os 10 critérios da Lei 14.133/2021.
             </p>
@@ -81,20 +76,20 @@ export default function UploadView({ navegar }: UploadViewProps) {
             />
 
             <div
-              className="border-2 border-dashed border-[#0a2f64]/30 bg-slate-50 rounded-xl p-12 cursor-pointer hover:bg-blue-50 hover:border-[#0a2f64] transition-all group"
+              className="border-2 border-dashed border-brand-primary/30 bg-slate-50 rounded-xl p-12 cursor-pointer hover:bg-blue-50 hover:border-brand-primary transition-all group"
               onClick={() => fileInputRef.current?.click()}
               onDrop={handleDrop}
               onDragOver={handleDragOver}
             >
-              <FileText size={48} className="mx-auto text-slate-300 group-hover:text-[#0a2f64] mb-4 transition-colors" />
-              <p className="text-[#0a2f64] font-bold text-lg">Clique aqui ou arraste o arquivo</p>
+              <FileText size={48} className="mx-auto text-slate-300 group-hover:text-brand-primary mb-4 transition-colors" />
+              <p className="text-brand-primary font-bold text-lg">Clique aqui ou arraste o arquivo</p>
               <p className="text-sm text-slate-500 mt-2 font-medium">Suporta DOC, DOCX e PDF (Máx. 10MB)</p>
             </div>
           </>
         ) : analisando ? (
           <div className="py-24">
-            <Loader2 size={64} className="animate-spin text-[#0a2f64] mx-auto mb-8" />
-            <h3 className="text-2xl font-bold text-[#0a2f64]">Processando via NLP e IA...</h3>
+            <Loader2 size={64} className="animate-spin text-brand-primary mx-auto mb-8" />
+            <h3 className="text-2xl font-bold text-brand-primary">Processando via NLP e IA...</h3>
             <p className="text-slate-500 mt-3 font-medium text-lg">
               Extraindo seções de <strong>{fileName}</strong> e validando contra a Lei 14.133/2021.
             </p>
@@ -108,7 +103,7 @@ export default function UploadView({ navegar }: UploadViewProps) {
             <p className="text-slate-600 mb-6">{error}</p>
             <button
               onClick={() => { setError(null); setAnalysis(null); }}
-              className="px-6 py-3 bg-[#0a2f64] text-white font-bold rounded-lg hover:bg-[#134084] shadow-md transition"
+              className="px-6 py-3 bg-brand-primary text-white font-bold rounded-lg hover:bg-brand-hover shadow-md transition"
             >
               Tentar Novamente
             </button>
@@ -124,7 +119,7 @@ export default function UploadView({ navegar }: UploadViewProps) {
                Number(analysis.compliance_score) >= 50 ? <AlertTriangle size={48} /> :
                <XCircle size={48} />}
             </div>
-            <h2 className="text-3xl font-bold text-[#0a2f64] mb-2">Análise Concluída!</h2>
+            <h2 className="text-3xl font-bold text-brand-primary mb-2">Análise Concluída!</h2>
             <p className="text-slate-500 mb-4">{fileName}</p>
 
             <div className="bg-white p-8 rounded-xl text-left mt-8 mb-8 border border-slate-200 shadow-sm">
@@ -163,7 +158,7 @@ export default function UploadView({ navegar }: UploadViewProps) {
                   <p className="text-xs font-bold text-slate-500 uppercase mb-2">Referências Legais</p>
                   <div className="flex flex-wrap gap-2">
                     {analysis.legal_references.map((ref, i) => (
-                      <span key={i} className="px-2 py-1 bg-blue-50 text-[#0a2f64] text-xs rounded font-medium">
+                      <span key={i} className="px-2 py-1 bg-blue-50 text-brand-primary text-xs rounded font-medium">
                         {ref}
                       </span>
                     ))}
@@ -175,7 +170,7 @@ export default function UploadView({ navegar }: UploadViewProps) {
             <div className="flex gap-4 justify-center">
               <button
                 onClick={() => navegar('lista')}
-                className="px-8 py-3 bg-[#0a2f64] text-white font-bold rounded-lg hover:bg-[#134084] shadow-md transition text-lg"
+                className="px-8 py-3 bg-brand-primary text-white font-bold rounded-lg hover:bg-brand-hover shadow-md transition text-lg"
               >
                 Ver em Processos
               </button>

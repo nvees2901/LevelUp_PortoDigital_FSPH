@@ -1,5 +1,4 @@
 import React from 'react';
-import { COLORS } from '../../constants';
 import { useAuth } from '../../contexts/AuthContext';
 import FaixaCores from './FaixaCores';
 
@@ -9,7 +8,7 @@ export default function Header() {
 
   return (
     <header className="z-20 shadow-md flex flex-col">
-      <div style={{ backgroundColor: COLORS.primary }} className="py-2.5 px-5 flex justify-between items-center text-white">
+      <div className="bg-brand-primary py-2.5 px-5 flex justify-between items-center text-white">
         <div className="flex items-center gap-3">
           <img
             src="/logo.png"

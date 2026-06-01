@@ -5,6 +5,7 @@ Expõe o estado de cada documento obrigatório de um TR,
 e permite atualizações parciais (PATCH semântico).
 """
 
+from datetime import datetime
 from typing import Any
 
 from pydantic import BaseModel, field_validator
@@ -29,6 +30,16 @@ class TermChecklistOut(BaseModel):
     @classmethod
     def uuid_to_str(cls, v: Any) -> str:
         """Converte UUID do SQLAlchemy para string na resposta JSON."""
+        return str(v)
+
+    @field_validator("updated_at", mode="before")
+    @classmethod
+    def datetime_to_isoformat(cls, v: Any) -> str:
+        """Converte datetime do SQLAlchemy para string ISO-8601."""
+        if isinstance(v, datetime):
+            return v.isoformat()
+        if isinstance(v, str):
+            return v
         return str(v)
 
 

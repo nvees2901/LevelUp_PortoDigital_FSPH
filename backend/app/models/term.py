@@ -13,9 +13,10 @@ Decisões de design:
 
 import unicodedata
 import uuid
+from datetime import datetime
 from decimal import Decimal
 
-from sqlalchemy import DECIMAL, TEXT, VARCHAR, Enum, ForeignKey, String, text
+from sqlalchemy import DECIMAL, TEXT, VARCHAR, DateTime, Enum, ForeignKey, text
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.sql import func
@@ -166,14 +167,14 @@ class Term(Base):
     # --- Timestamps ---
     # server_default: o banco define o valor, não o Python
     # onupdate: atualizado automaticamente a cada UPDATE
-    created_at: Mapped[str] = mapped_column(
-        String,
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
         server_default=func.now(),
         nullable=False,
     )
 
-    updated_at: Mapped[str] = mapped_column(
-        String,
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
         server_default=func.now(),
         onupdate=func.now(),
         nullable=False,

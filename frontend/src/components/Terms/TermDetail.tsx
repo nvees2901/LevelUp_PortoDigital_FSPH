@@ -4,8 +4,9 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import {
-  FLUXO, ETAPAS, CHECKLIST, SETORES, COLORS, statusColor, modalColor,
+  FLUXO, ETAPAS, CHECKLIST, SETORES, statusColor, modalColor,
 } from '../../constants';
+import { formatCurrency, formatDate, scoreColor } from '../../utils';
 import {
   getTerm,
   getAnalysesByTerm,
@@ -94,7 +95,7 @@ export default function TermDetail({ termId, navegar }: TermDetailProps) {
       <div className="max-w-6xl mx-auto pb-10">
         <button
           onClick={() => navegar('lista')}
-          className="flex items-center gap-1.5 text-slate-500 hover:text-[#0a2f64] mb-5 text-sm font-medium transition-colors"
+          className="flex items-center gap-1.5 text-slate-500 hover:text-brand-primary mb-5 text-sm font-medium transition-colors"
         >
           <ArrowLeft size={15} /> Voltar para Processos
         </button>
@@ -104,7 +105,7 @@ export default function TermDetail({ termId, navegar }: TermDetailProps) {
           <p className="text-sm text-slate-500 mb-4">{error}</p>
           <button
             onClick={loadData}
-            className="px-4 py-2 bg-[#0a2f64] text-white rounded-lg text-sm font-bold hover:bg-[#134084] transition"
+            className="px-4 py-2 bg-brand-primary text-white rounded-lg text-sm font-bold hover:bg-brand-hover transition"
           >
             Tentar novamente
           </button>
@@ -127,17 +128,7 @@ export default function TermDetail({ termId, navegar }: TermDetailProps) {
 
   const latestAnalysis = analyses.length > 0 ? analyses[0] : null;
   const score = latestAnalysis?.compliance_score ?? null;
-  const scoreColor =
-    score == null ? 'text-slate-300'
-    : score >= 80 ? 'text-emerald-400'
-    : score >= 50 ? 'text-amber-400'
-    : 'text-red-400';
-
-  const formatValue = (v: number | null) =>
-    v != null ? `R$ ${v.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}` : '—';
-
-  const formatDate = (iso: string) =>
-    new Date(iso).toLocaleDateString('pt-BR');
+  const scoreColorClass = score == null ? 'text-slate-300' : scoreColor(score);
 
   // --- Handlers ---
   const handlePdf = async () => {
@@ -200,7 +191,7 @@ export default function TermDetail({ termId, navegar }: TermDetailProps) {
     <div className="max-w-6xl mx-auto pb-10">
       <button
         onClick={() => navegar('lista')}
-        className="flex items-center gap-1.5 text-slate-500 hover:text-[#0a2f64] mb-5 text-sm font-medium transition-colors"
+        className="flex items-center gap-1.5 text-slate-500 hover:text-brand-primary mb-5 text-sm font-medium transition-colors"
       >
         <ArrowLeft size={15} /> Voltar para Processos
       </button>
@@ -213,7 +204,7 @@ export default function TermDetail({ termId, navegar }: TermDetailProps) {
             <div className="flex justify-between items-start mb-4">
               <div>
                 <div className="flex items-center gap-2 mb-1 flex-wrap">
-                  <h1 className="text-xl font-black text-[#0a2f64]">{term.title}</h1>
+                  <h1 className="text-xl font-black text-brand-primary">{term.title}</h1>
                   <span className={`text-xs font-bold px-2 py-0.5 rounded ${modalColor(term.category)}`}>
                     {term.category}
                   </span>
@@ -225,8 +216,7 @@ export default function TermDetail({ termId, navegar }: TermDetailProps) {
               <div className="flex gap-2 shrink-0">
                 <button
                   onClick={handlePdf}
-                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-white rounded-lg transition shadow-sm hover:opacity-90"
-                  style={{ backgroundColor: COLORS.primary }}
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-white bg-brand-primary rounded-lg transition shadow-sm hover:opacity-90"
                   title="Baixar PDF"
                 >
                   <Download size={13} /> PDF
@@ -246,7 +236,7 @@ export default function TermDetail({ termId, navegar }: TermDetailProps) {
               {[
                 { l: 'Status', v: term.status },
                 { l: 'Categoria', v: term.category },
-                { l: 'Valor Estimado', v: formatValue(term.estimated_value) },
+                { l: 'Valor Estimado', v: formatCurrency(term.estimated_value) },
                 { l: 'Criado em', v: formatDate(term.created_at) },
               ].map(item => (
                 <div key={item.l}>
@@ -259,7 +249,7 @@ export default function TermDetail({ termId, navegar }: TermDetailProps) {
             {/* Checklist */}
             <div>
               <div className="flex items-center justify-between mb-3">
-                <h3 className="font-bold text-[#0a2f64] text-xs uppercase tracking-wider flex items-center gap-1.5">
+                <h3 className="font-bold text-brand-primary text-xs uppercase tracking-wider flex items-center gap-1.5">
                   <FileCheck size={14} /> Checklist Documental — Art. 54 / Lei 14.133/2021
                 </h3>
                 <span
@@ -300,13 +290,13 @@ export default function TermDetail({ termId, navegar }: TermDetailProps) {
           {/* Historico */}
           {historico.length > 0 && (
             <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-5">
-              <h3 className="font-bold text-[#0a2f64] text-xs uppercase tracking-wider mb-3">
+              <h3 className="font-bold text-brand-primary text-xs uppercase tracking-wider mb-3">
                 Histórico de Tramitação
               </h3>
               <div className="space-y-2">
                 {historico.map(event => (
                   <div key={event.id} className="flex gap-3 text-xs">
-                    <div className="w-1.5 h-1.5 rounded-full bg-[#0a2f64] mt-1.5 shrink-0" />
+                    <div className="w-1.5 h-1.5 rounded-full bg-brand-primary mt-1.5 shrink-0" />
                     <div>
                       <p className="font-semibold text-slate-700">
                         {event.acao}
@@ -335,14 +325,11 @@ export default function TermDetail({ termId, navegar }: TermDetailProps) {
         <div className="space-y-5">
           {/* Score IA */}
           <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-            <div
-              className="p-3 text-white flex items-center justify-between"
-              style={{ backgroundColor: COLORS.primary }}
-            >
+            <div className="p-3 text-white flex items-center justify-between bg-brand-primary">
               <span className="font-bold text-sm flex items-center gap-1.5">
                 <Bot size={15} /> Análise IA
               </span>
-              <span className={`text-xl font-black ${scoreColor}`}>
+              <span className={`text-xl font-black ${scoreColorClass}`}>
                 {score != null ? `${score}%` : '--'}
               </span>
             </div>
@@ -367,8 +354,7 @@ export default function TermDetail({ termId, navegar }: TermDetailProps) {
               <button
                 onClick={handleAnalisarIA}
                 disabled={analyzingIA}
-                className="w-full py-2 text-xs font-bold rounded-lg transition flex items-center justify-center gap-1.5 text-white disabled:opacity-60"
-                style={{ backgroundColor: COLORS.primary }}
+                className="w-full py-2 text-xs font-bold rounded-lg transition flex items-center justify-center gap-1.5 text-white bg-brand-primary disabled:opacity-60"
               >
                 <Bot size={13} />
                 {analyzingIA ? 'Analisando...' : 'Solicitar Análise IA'}
@@ -378,7 +364,7 @@ export default function TermDetail({ termId, navegar }: TermDetailProps) {
 
           {/* Fluxo COLIC */}
           <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-4">
-            <h3 className="font-bold text-[#0a2f64] text-xs uppercase tracking-wider border-b border-slate-100 pb-2 mb-4">
+            <h3 className="font-bold text-brand-primary text-xs uppercase tracking-wider border-b border-slate-100 pb-2 mb-4">
               Fluxo COLIC/FSPH
             </h3>
             <div className="space-y-1.5 mb-5">
@@ -395,14 +381,14 @@ export default function TermDetail({ termId, navegar }: TermDetailProps) {
                     <div
                       className={`w-5 h-5 rounded-full flex items-center justify-center shrink-0 text-xs font-bold
                         ${isCur
-                          ? 'bg-[#0a2f64] text-white ring-2 ring-blue-200 ring-offset-1 scale-110'
+                          ? 'bg-brand-primary text-white ring-2 ring-blue-200 ring-offset-1 scale-110'
                           : isPast
                           ? 'bg-emerald-500 text-white'
                           : 'bg-slate-200 text-slate-500'}`}
                     >
                       {isPast ? '✓' : idx + 1}
                     </div>
-                    <span className={isCur ? 'text-[#0a2f64] font-bold' : 'text-slate-500'}>
+                    <span className={isCur ? 'text-brand-primary font-bold' : 'text-slate-500'}>
                       {step}
                     </span>
                   </div>
@@ -434,7 +420,7 @@ export default function TermDetail({ termId, navegar }: TermDetailProps) {
                   <>
                     Aguardando ação de:
                     <br />
-                    <strong className="text-[#0a2f64] text-sm block mt-0.5">
+                    <strong className="text-brand-primary text-sm block mt-0.5">
                       {SETORES.find(s => s.id === conf.ator)?.nome}
                     </strong>
                   </>

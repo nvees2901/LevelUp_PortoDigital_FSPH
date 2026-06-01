@@ -3,7 +3,7 @@ import type { ReactNode } from 'react';
 import type { UsuarioAtual, UserOut } from '../types';
 import { SETORES } from '../constants';
 import { loginRequest, getMe } from '../services/auth';
-import { ApiError } from '../services/api';
+import { ApiError, TOKEN_KEY } from '../services/api';
 
 interface AuthContextType {
   usuario: UsuarioAtual | null;
@@ -13,7 +13,6 @@ interface AuthContextType {
   logout: () => void;
 }
 
-const TOKEN_KEY = 'fsph_token';
 const USER_KEY = 'fsph_user';
 
 function deriveUsuario(userOut: UserOut): UsuarioAtual | null {
@@ -48,6 +47,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const logout = useCallback(() => {
+    localStorage.removeItem(TOKEN_KEY);
+    localStorage.removeItem(USER_KEY);
+    setUsuario(null);
+    setError(null);
+  }, []);
+
   // Valida o token em background ao montar — faz logout silencioso se expirado
   useEffect(() => {
     const token = localStorage.getItem(TOKEN_KEY);
@@ -56,12 +62,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       localStorage.removeItem(USER_KEY);
       return;
     }
-    getMe(token).catch(() => {
-      localStorage.removeItem(TOKEN_KEY);
-      localStorage.removeItem(USER_KEY);
-      setUsuario(null);
+    getMe().catch(() => {
+      logout();
     });
-  }, []);
+  }, [logout]);
+
+  // Automatically log out when any API call returns 401
+  useEffect(() => {
+    const handle401 = () => logout();
+    window.addEventListener('auth:401', handle401);
+    return () => window.removeEventListener('auth:401', handle401);
+  }, [logout]);
 
   const login = useCallback(async (matricula: string, senha: string) => {
     setError(null);
@@ -81,13 +92,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } finally {
       setLoading(false);
     }
-  }, []);
-
-  const logout = useCallback(() => {
-    localStorage.removeItem(TOKEN_KEY);
-    localStorage.removeItem(USER_KEY);
-    setUsuario(null);
-    setError(null);
   }, []);
 
   return (
