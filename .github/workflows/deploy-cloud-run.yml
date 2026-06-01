@@ -22,20 +22,20 @@ jobs:
         with:
           project_id: ${{ secrets.GCP_PROJECT }}
 
-      - name: Configure Docker for gcr
-        run: gcloud auth configure-docker --quiet
+      - name: Configure Docker for Artifact Registry
+        run: gcloud auth configure-docker us-central1-docker.pkg.dev --quiet
 
       - name: Build Docker image
         run: |
-          docker build -t gcr.io/${{ secrets.GCP_PROJECT }}/fsph-backend:${{ github.sha }} backend
+          docker build -t us-central1-docker.pkg.dev/${{ secrets.GCP_PROJECT }}/fsph-backend/fsph-backend:${{ github.sha }} backend
 
-      - name: Push image to GCR
+      - name: Push image to Artifact Registry
         run: |
-          docker push gcr.io/${{ secrets.GCP_PROJECT }}/fsph-backend:${{ github.sha }}
+          docker push us-central1-docker.pkg.dev/${{ secrets.GCP_PROJECT }}/fsph-backend/fsph-backend:${{ github.sha }}
 
       - name: Deploy to Cloud Run
         env:
-          IMAGE: gcr.io/${{ secrets.GCP_PROJECT }}/fsph-backend:${{ github.sha }}
+          IMAGE: us-central1-docker.pkg.dev/${{ secrets.GCP_PROJECT }}/fsph-backend/fsph-backend:${{ github.sha }}
         run: |
           gcloud run deploy ${{ secrets.CLOUD_RUN_SERVICE }} \
             --image "$IMAGE" \
