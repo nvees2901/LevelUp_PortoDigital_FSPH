@@ -18,10 +18,9 @@ Como rodar:
 
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-from starlette.middleware.base import BaseHTTPMiddleware
 
 from app.api.routes import admin, analysis, auth, chat, dashboard, terms, upload, workflow
 from app.core.config import settings
@@ -44,32 +43,47 @@ logger = get_logger(__name__)
 # do CORSMiddleware na pilha. Isso faz com que respostas 500 geradas por
 # exceções não previstas saiam sem os headers Access-Control-Allow-*.
 #
-# Solução: BaseHTTPMiddleware captura a exceção DENTRO da pilha, depois
-# que o CORSMiddleware já envolveu a resposta. A ordem de add_middleware
-# (LIFO para "mais externo"): primeiro CatchAllMiddleware é registrado
-# (fica mais interno), depois CORSMiddleware (fica mais externo).
+# Solução: middleware ASGI puro que captura a exceção DENTRO da pilha,
+# antes que a resposta chegue ao CORSMiddleware (que fica mais externo).
+# A ordem de add_middleware (LIFO para "mais externo"):
+#   1. CatchAllMiddleware (primeiro) → fica mais INTERNO
+#   2. CORSMiddleware (último)       → fica mais EXTERNO
 # Fluxo: req → CORSMiddleware → CatchAllMiddleware → rotas
 #          res ← CORSMiddleware (adiciona ACAO) ← CatchAllMiddleware(500)
+#
+# Por que ASGI puro e não BaseHTTPMiddleware?
+#   BaseHTTPMiddleware acumula o corpo inteiro antes de repassar, o que
+#   quebra endpoints SSE (chat streaming). O ASGI middleware delega
+#   diretamente ao app interno sem buffering — streaming funciona normalmente.
 
-class CatchAllMiddleware(BaseHTTPMiddleware):
+class CatchAllMiddleware:
     """
-    Captura qualquer Exception não tratada e retorna JSON 500 padronizado.
-    Por estar mais interno que o CORSMiddleware, a resposta 500 ainda
-    atravessa o CORS que adiciona Access-Control-Allow-Origin.
+    Middleware ASGI puro que captura qualquer Exception não tratada e
+    retorna JSON 500 padronizado. Por estar mais interno que o
+    CORSMiddleware, a resposta 500 ainda atravessa o CORS que adiciona
+    Access-Control-Allow-Origin. Não interfere com respostas streaming
+    (SSE/PDF) pois não faz buffering do corpo.
     """
 
-    async def dispatch(self, request: Request, call_next):
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
         try:
-            return await call_next(request)
+            await self.app(scope, receive, send)
         except Exception:
             logger.error("Erro não tratado (catch-all middleware)", exc_info=True)
-            return JSONResponse(
+            response = JSONResponse(
                 status_code=500,
                 content={
                     "error": "INTERNAL_SERVER_ERROR",
                     "message": "Ocorreu um erro interno. Por favor, tente novamente.",
                 },
             )
+            await response(scope, receive, send)
 
 
 # ------------------------------------------------------------------ #
