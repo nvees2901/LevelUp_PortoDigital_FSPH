@@ -18,8 +18,10 @@ Como rodar:
 
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+from starlette.middleware.base import BaseHTTPMiddleware
 
 from app.api.routes import admin, analysis, auth, chat, dashboard, terms, upload, workflow
 from app.core.config import settings
@@ -32,6 +34,42 @@ from app.utils.logging import get_logger, setup_logging
 # ------------------------------------------------------------------ #
 setup_logging()
 logger = get_logger(__name__)
+
+
+# ------------------------------------------------------------------ #
+# Middleware catch-all — garante headers CORS em respostas 500
+# ------------------------------------------------------------------ #
+# O handler global de Exception registrado via add_exception_handler()
+# é processado pelo ServerErrorMiddleware, que fica ACIMA (mais externo)
+# do CORSMiddleware na pilha. Isso faz com que respostas 500 geradas por
+# exceções não previstas saiam sem os headers Access-Control-Allow-*.
+#
+# Solução: BaseHTTPMiddleware captura a exceção DENTRO da pilha, depois
+# que o CORSMiddleware já envolveu a resposta. A ordem de add_middleware
+# (LIFO para "mais externo"): primeiro CatchAllMiddleware é registrado
+# (fica mais interno), depois CORSMiddleware (fica mais externo).
+# Fluxo: req → CORSMiddleware → CatchAllMiddleware → rotas
+#          res ← CORSMiddleware (adiciona ACAO) ← CatchAllMiddleware(500)
+
+class CatchAllMiddleware(BaseHTTPMiddleware):
+    """
+    Captura qualquer Exception não tratada e retorna JSON 500 padronizado.
+    Por estar mais interno que o CORSMiddleware, a resposta 500 ainda
+    atravessa o CORS que adiciona Access-Control-Allow-Origin.
+    """
+
+    async def dispatch(self, request: Request, call_next):
+        try:
+            return await call_next(request)
+        except Exception:
+            logger.error("Erro não tratado (catch-all middleware)", exc_info=True)
+            return JSONResponse(
+                status_code=500,
+                content={
+                    "error": "INTERNAL_SERVER_ERROR",
+                    "message": "Ocorreu um erro interno. Por favor, tente novamente.",
+                },
+            )
 
 
 # ------------------------------------------------------------------ #
@@ -85,12 +123,15 @@ async def lifespan(app: FastAPI):
 
         async def _index_in_background() -> None:
             try:
+                from app.core.database import AsyncSessionLocal
                 from app.services.rag_service import RagService
                 await asyncio.to_thread(RagService.setup)
                 await asyncio.to_thread(RagService.index_documents)
-                logger.info("✓ RAG: indexação em background concluída")
+                async with AsyncSessionLocal() as seed_db:
+                    await RagService.import_seed_documents(seed_db)
+                logger.info("✓ RAG: inicialização em background concluída")
             except Exception as e:
-                logger.warning("RAG: indexação em background falhou (será tentada na primeira busca): %s", e)
+                logger.warning("RAG: inicialização em background falhou (será tentada na primeira busca): %s", e)
 
         asyncio.create_task(_index_in_background())
     else:
@@ -136,11 +177,21 @@ usam dados simulados — sem custo e sem necessidade de conta OpenAI.
 
 
 # ------------------------------------------------------------------ #
-# CORS — Cross-Origin Resource Sharing
+# Middleware stack — ordem importa (add_middleware é LIFO para "externo")
 # ------------------------------------------------------------------ #
-# Permite que o frontend Next.js (porta 3000) chame esta API
-# Em produção, substitua por origens específicas no .env
+# O último add_middleware fica mais EXTERNO (vê a req primeiro, res por último).
+# Queremos: req → CORS → CatchAll → rotas
+#           res ← CORS (adiciona headers) ← CatchAll (retorna 500 se errar)
+#
+# Portanto:
+#   1. CatchAllMiddleware PRIMEIRO → fica mais INTERNO
+#   2. CORSMiddleware DEPOIS       → fica mais EXTERNO
 
+# 1. Inner: captura Exception antes que a resposta chegue ao CORS
+app.add_middleware(CatchAllMiddleware)
+
+# 2. Outer: adiciona headers Access-Control-Allow-* em toda resposta
+#    (incluindo a JSONResponse 500 gerada pelo CatchAllMiddleware acima)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.CORS_ORIGINS,
