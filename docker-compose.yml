@@ -28,6 +28,7 @@ services:
       - CHROMA_PORT=8000
     volumes:
       - ./documents:/app/documents:ro
+      - context_docs_data:/app/context_documents
     depends_on:
       postgres:
         condition: service_healthy
@@ -103,3 +104,4 @@ volumes:
   postgres_data:
   chroma_data:
   ollama_data:
+  context_docs_data:
