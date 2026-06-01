@@ -14,6 +14,7 @@ GET    /api/v1/admin/knowledge-base/collections    → estatísticas das coleç�
 
 import asyncio
 import os
+import re
 import uuid
 from pathlib import Path
 from typing import Annotated, Literal
@@ -30,6 +31,7 @@ from app.repositories.context_document import ContextDocumentRepository
 from app.schemas.context_document import (
     ContextDocumentList,
     ContextDocumentResponse,
+    ContextDocumentTextCreate,
     KnowledgeBaseCollection,
     KnowledgeBaseCollectionList,
 )
@@ -42,7 +44,7 @@ router = APIRouter(prefix="/admin", tags=["Admin"])
 
 DbDep = Annotated[AsyncSession, Depends(get_db)]
 
-ALLOWED_EXTENSIONS = {".pdf", ".docx", ".doc"}
+ALLOWED_EXTENSIONS = {".pdf", ".docx", ".doc", ".txt"}
 
 
 def _doc_to_response(doc) -> ContextDocumentResponse:
@@ -151,6 +153,46 @@ async def list_context_documents(db: DbDep, current_user: AdminUser):
         items=[_doc_to_response(d) for d in docs],
         total=len(docs),
     )
+
+
+@router.post("/context-documents/text", response_model=ContextDocumentResponse, status_code=201)
+async def create_text_context_document(
+    payload: ContextDocumentTextCreate,
+    background_tasks: BackgroundTasks,
+    db: DbDep,
+    current_user: AdminUser,
+):
+    """Cria um documento de contexto a partir de texto puro (sem upload de arquivo)."""
+    safe_title = re.sub(r'[^\w\s-]', '', payload.title).strip().replace(' ', '_')[:50]
+    unique_filename = f"{uuid.uuid4()}_{safe_title}.txt"
+
+    storage_dir = Path(settings.CONTEXT_DOCS_DIR)
+    storage_dir.mkdir(parents=True, exist_ok=True)
+    storage_path = str(storage_dir / unique_filename)
+
+    async with aiofiles.open(storage_path, "w", encoding="utf-8") as f:
+        await f.write(payload.content)
+
+    size_bytes = len(payload.content.encode("utf-8"))
+
+    doc = await ContextDocumentRepository.create(db, {
+        "filename": unique_filename,
+        "original_filename": f"{payload.title}.txt",
+        "mime_type": "text/plain",
+        "size_bytes": size_bytes,
+        "storage_path": storage_path,
+        "uploaded_by_id": current_user.id,
+        "collection": payload.collection,
+        "status": "pending",
+    })
+    await db.commit()
+    await db.refresh(doc)
+
+    background_tasks.add_task(
+        _run_indexing_task, str(doc.id), doc.storage_path, doc.filename, doc.collection
+    )
+
+    return _doc_to_response(doc)
 
 
 @router.delete("/context-documents/{doc_id}", status_code=204)

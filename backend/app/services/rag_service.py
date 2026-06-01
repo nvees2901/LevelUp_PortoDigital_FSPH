@@ -411,7 +411,11 @@ class RagService:
 
         file_path = Path(storage_path)
 
-        if file_path.suffix.lower() == ".pdf":
+        if file_path.suffix.lower() == ".txt":
+            text = await asyncio.to_thread(
+                lambda: file_path.read_text(encoding="utf-8")
+            )
+        elif file_path.suffix.lower() == ".pdf":
             text = await asyncio.to_thread(_extract_pdf_text, file_path)
         else:
             file_bytes = await asyncio.to_thread(file_path.read_bytes)

@@ -282,9 +282,13 @@ export async function listContextDocuments(): Promise<ContextDocumentList> {
   return request<ContextDocumentList>('/admin/context-documents');
 }
 
-export async function uploadContextDocument(file: File): Promise<ContextDocument> {
+export async function uploadContextDocument(
+  file: File,
+  collection: 'context_extra' | 'lei_14133' | 'termos_aprovados' = 'context_extra',
+): Promise<ContextDocument> {
   const formData = new FormData();
   formData.append('file', file);
+  formData.append('collection', collection);
   return request<ContextDocument>('/admin/context-documents', {
     method: 'POST',
     body: formData,
@@ -297,6 +301,14 @@ export async function deleteContextDocument(id: string): Promise<void> {
 
 export async function reindexContextDocument(id: string): Promise<ContextDocument> {
   return request<ContextDocument>(`/admin/context-documents/${id}/reindex`, { method: 'POST' });
+}
+
+export async function deactivateContextDocument(id: string): Promise<ContextDocument> {
+  return request<ContextDocument>(`/admin/context-documents/${id}/deactivate`, { method: 'POST' });
+}
+
+export async function activateContextDocument(id: string): Promise<ContextDocument> {
+  return request<ContextDocument>(`/admin/context-documents/${id}/activate`, { method: 'POST' });
 }
 
 export async function downloadContextDocument(id: string, filename: string): Promise<void> {
@@ -317,6 +329,17 @@ export async function downloadContextDocument(id: string, filename: string): Pro
     document.body.removeChild(a);
     URL.revokeObjectURL(objectUrl);
   }, 100);
+}
+
+export async function createTextContextDocument(
+  title: string,
+  content: string,
+  collection: string = 'context_extra',
+): Promise<ContextDocument> {
+  return request<ContextDocument>('/admin/context-documents/text', {
+    method: 'POST',
+    body: JSON.stringify({ title, content, collection }),
+  });
 }
 
 export async function getKnowledgeBaseCollections(): Promise<KnowledgeBaseCollectionList> {

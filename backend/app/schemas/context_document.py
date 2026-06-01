@@ -11,9 +11,9 @@ Usados nas respostas dos endpoints de administração:
 """
 
 from datetime import datetime
-from typing import Any
+from typing import Any, Literal
 
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, Field, field_validator
 
 
 class ContextDocumentResponse(BaseModel):
@@ -60,6 +60,16 @@ class ContextDocumentResponse(BaseModel):
 class ContextDocumentList(BaseModel):
     items: list[ContextDocumentResponse]
     total: int
+
+
+class ContextDocumentTextCreate(BaseModel):
+    """Payload para criação de documento de contexto via texto puro."""
+    title: str = Field(..., min_length=3, max_length=200, description="Título do documento")
+    content: str = Field(..., min_length=10, description="Conteúdo textual que será indexado")
+    collection: Literal["context_extra", "lei_14133", "termos_aprovados"] = Field(
+        default="context_extra",
+        description="Coleção ChromaDB de destino",
+    )
 
 
 class KnowledgeBaseCollection(BaseModel):

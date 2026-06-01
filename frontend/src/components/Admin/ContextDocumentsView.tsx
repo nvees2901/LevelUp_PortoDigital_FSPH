@@ -14,6 +14,7 @@ import {
   getKnowledgeBaseCollections,
   activateContextDocument,
   deactivateContextDocument,
+  createTextContextDocument,
 } from '../../services/api';
 import type { ContextDocument, KnowledgeBaseCollection, TelaId } from '../../types';
 
@@ -224,6 +225,105 @@ function UploadZone({ onUploaded }: { onUploaded: () => void }) {
         </div>
       )}
     </div>
+  );
+}
+
+// ─── TextInputZone ────────────────────────────────────────────────────────────
+
+function TextInputZone({ onAdded }: { onAdded: () => void }) {
+  const [title, setTitle] = useState('');
+  const [content, setContent] = useState('');
+  const [collection, setCollection] = useState<CollectionKey>('context_extra');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState(false);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError(null);
+    setSuccess(false);
+    setLoading(true);
+    try {
+      await createTextContextDocument(title, content, collection);
+      setTitle('');
+      setContent('');
+      setCollection('context_extra');
+      setSuccess(true);
+      onAdded();
+      setTimeout(() => setSuccess(false), 3000);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Erro ao adicionar texto');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <form onSubmit={handleSubmit} className="space-y-2">
+      <div className="bg-white rounded-xl border border-slate-200 px-4 py-3 flex items-center gap-3">
+        <label className="text-xs font-medium text-slate-500 shrink-0">Base de destino:</label>
+        <select
+          value={collection}
+          onChange={e => setCollection(e.target.value as CollectionKey)}
+          disabled={loading}
+          className="flex-1 text-sm border border-slate-200 rounded-lg px-2 py-1.5 focus:outline-none focus:border-brand-primary transition-colors disabled:opacity-50"
+        >
+          {COLLECTION_OPTIONS.map(o => (
+            <option key={o.value} value={o.value}>{o.label}</option>
+          ))}
+        </select>
+      </div>
+      <div className="bg-white rounded-xl border border-slate-200 p-4 space-y-3">
+        <div>
+          <label className="block text-xs font-medium text-slate-500 mb-1">Título</label>
+          <input
+            type="text"
+            value={title}
+            onChange={e => setTitle(e.target.value)}
+            disabled={loading}
+            placeholder="Ex: Política de Compras 2024"
+            minLength={3}
+            maxLength={200}
+            required
+            className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:border-brand-primary transition-colors disabled:opacity-50"
+          />
+        </div>
+        <div>
+          <label className="block text-xs font-medium text-slate-500 mb-1">Conteúdo</label>
+          <textarea
+            value={content}
+            onChange={e => setContent(e.target.value)}
+            disabled={loading}
+            placeholder="Cole ou digite o texto que será indexado na base de conhecimento..."
+            minLength={10}
+            required
+            rows={6}
+            className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:border-brand-primary transition-colors disabled:opacity-50 resize-y"
+          />
+        </div>
+        <div className="flex items-center justify-between gap-3">
+          {error && (
+            <p className="text-xs text-red-500 flex-1">{error}</p>
+          )}
+          {success && !error && (
+            <span className="text-xs text-emerald-600 flex items-center gap-1 flex-1">
+              <CheckCircle2 size={12} /> Texto adicionado com sucesso
+            </span>
+          )}
+          {!error && !success && <span className="flex-1" />}
+          <button
+            type="submit"
+            disabled={loading}
+            className="px-4 py-2 text-sm font-medium text-white bg-brand-primary hover:bg-brand-primary/90 rounded-lg transition-colors flex items-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed shrink-0"
+          >
+            {loading
+              ? <><RefreshCw size={14} className="animate-spin" /> Enviando...</>
+              : <><FileText size={14} /> Adicionar à base de conhecimento</>
+            }
+          </button>
+        </div>
+      </div>
+    </form>
   );
 }
 
@@ -683,6 +783,14 @@ export default function ContextDocumentsView({ navegar: _navegar }: ContextDocum
 
       {/* Upload */}
       <UploadZone onUploaded={fetchDocs} />
+
+      {/* Text input */}
+      <div className="relative flex items-center gap-3">
+        <div className="flex-1 h-px bg-slate-200" />
+        <span className="text-xs text-slate-400 shrink-0">ou adicione texto diretamente</span>
+        <div className="flex-1 h-px bg-slate-200" />
+      </div>
+      <TextInputZone onAdded={fetchDocs} />
 
       {/* Error banner */}
       {error && (
