@@ -419,10 +419,13 @@ class RagService:
             text = await asyncio.to_thread(
                 DocumentService.extract_text_sync, file_bytes, filename
             )
+            del file_bytes  # libera antes do pico de memória do modelo ONNX
 
         chunks = cls._chunk_text(text, filename)
+        del text  # release before ONNX model loads
         if not chunks:
             return 0
+        import gc; gc.collect()
 
         # Remove chunks antigos deste arquivo (evita duplicatas em re-indexação)
         await asyncio.to_thread(cls._remove_chunks_from_collection, target_collection, filename)
