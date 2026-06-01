@@ -5,6 +5,7 @@ Representa o resultado da análise de um TR contra os 10 critérios
 da Lei 14.133/2021, conforme definido no CONTEXT.md (seção 6.2).
 """
 
+from datetime import datetime
 from decimal import Decimal
 from typing import Any
 
@@ -110,6 +111,16 @@ class AnalysisResponse(BaseModel):
     def uuid_to_str(cls, v: Any) -> str:
         return str(v)
 
+    @field_validator("created_at", mode="before")
+    @classmethod
+    def datetime_to_isoformat(cls, v: Any) -> str:
+        """Converte datetime do SQLAlchemy para string ISO-8601."""
+        if isinstance(v, datetime):
+            return v.isoformat()
+        if isinstance(v, str):
+            return v
+        return str(v)
+
     @classmethod
     def from_orm_analysis(cls, analysis: Any) -> "AnalysisResponse":
         """
@@ -144,6 +155,16 @@ class AnalysisSummary(BaseModel):
     @field_validator("id", "term_id", mode="before")
     @classmethod
     def uuid_to_str(cls, v: Any) -> str:
+        return str(v)
+
+    @field_validator("created_at", mode="before")
+    @classmethod
+    def datetime_to_isoformat(cls, v: Any) -> str:
+        """Converte datetime do SQLAlchemy para string ISO-8601."""
+        if isinstance(v, datetime):
+            return v.isoformat()
+        if isinstance(v, str):
+            return v
         return str(v)
 
 

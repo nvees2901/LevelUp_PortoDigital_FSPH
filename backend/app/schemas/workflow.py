@@ -5,6 +5,7 @@ Cobre as ações de avanço e devolução de TRs entre setores,
 e a saída de um evento de workflow para o cliente.
 """
 
+from datetime import datetime
 from typing import Any
 
 from pydantic import BaseModel, Field, field_validator
@@ -48,4 +49,14 @@ class WorkflowEventOut(BaseModel):
         """Converte UUID do SQLAlchemy para string na resposta JSON."""
         if v is None:
             return v  # type: ignore[return-value]
+        return str(v)
+
+    @field_validator("created_at", mode="before")
+    @classmethod
+    def datetime_to_isoformat(cls, v: Any) -> str:
+        """Converte datetime do SQLAlchemy para string ISO-8601."""
+        if isinstance(v, datetime):
+            return v.isoformat()
+        if isinstance(v, str):
+            return v
         return str(v)
