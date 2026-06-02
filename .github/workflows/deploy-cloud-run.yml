@@ -36,6 +36,9 @@ jobs:
       - name: Deploy to Cloud Run
         env:
           IMAGE: us-central1-docker.pkg.dev/${{ secrets.GCP_PROJECT }}/fsph-backend/fsph-backend:${{ github.sha }}
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          SECRET_KEY: ${{ secrets.SECRET_KEY }}
+          GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
         run: |
           gcloud run deploy ${{ secrets.CLOUD_RUN_SERVICE }} \
             --image "$IMAGE" \
@@ -43,7 +46,10 @@ jobs:
             --region ${{ secrets.CLOUD_RUN_REGION }} \
             --allow-unauthenticated \
             --add-cloudsql-instances ${{ secrets.GCP_PROJECT }}:${{ secrets.CLOUD_RUN_REGION }}:fsph-db-pg \
-            --set-env-vars "ENVIRONMENT=production,DATABASE_URL=${{ secrets.DATABASE_URL }},SECRET_KEY=${{ secrets.SECRET_KEY }},GCS_BUCKET=${{ secrets.GCS_BUCKET }}"
+            --set-env-vars "ENVIRONMENT=production" \
+            --set-env-vars "DATABASE_URL=${DATABASE_URL}" \
+            --set-env-vars "SECRET_KEY=${SECRET_KEY}" \
+            --set-env-vars "GCS_BUCKET=${GCS_BUCKET}"
 
       - name: (optional) Run migrations (see DEPLOY_BACKEND.md)
         run: echo "If you want automated migrations, enable Cloud Run jobs or run alembic manually in a one-off job."
