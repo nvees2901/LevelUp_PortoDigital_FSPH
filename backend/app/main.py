@@ -138,12 +138,22 @@ usam dados simulados — sem custo e sem necessidade de conta OpenAI.
 # ------------------------------------------------------------------ #
 # CORS — Cross-Origin Resource Sharing
 # ------------------------------------------------------------------ #
-# Permite que o frontend Next.js (porta 3000) chame esta API
-# Em produção, substitua por origens específicas no .env
+# Permite que o frontend Vite/React (porta 5173 no desenvolvimento) chame esta API.
+# Em produção, substitua por origens específicas no .env ou use rewrite reverse proxy.
+
+_cors_origins = list(settings.CORS_ORIGINS)
+for _o in [
+    "https://fsph-colic.web.app",
+    "https://fsph-colic.firebaseapp.com",
+    "http://localhost:5173",
+    "http://localhost:3000",
+]:
+    if _o not in _cors_origins:
+        _cors_origins.append(_o)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.CORS_ORIGINS,
+    allow_origins=_cors_origins,
     allow_credentials=True,
     allow_methods=["*"],          # GET, POST, PUT, DELETE, OPTIONS...
     allow_headers=["*"],          # Content-Type, Authorization...
