@@ -47,7 +47,7 @@ export default function TermList({ navegar }: TermListProps) {
   return (
     <div className="bg-white rounded-xl border border-slate-200 shadow-sm flex flex-col">
       <div className="p-4 border-b border-slate-200 flex flex-wrap gap-3 justify-between items-center">
-        <h2 className="text-base font-bold text-brand-primary">Processos de Contratacao</h2>
+        <h2 className="text-base font-bold text-brand-primary">Processos de Contratação</h2>
         {usuario?.id === 'demandante' && (
           <button
             onClick={() => navegar('chat')}
@@ -65,7 +65,7 @@ export default function TermList({ navegar }: TermListProps) {
           <input
             value={busca}
             onChange={e => setBusca(e.target.value)}
-            placeholder="Buscar por titulo ou ID..."
+            placeholder="Buscar por título ou ID..."
             className="w-full pl-8 pr-4 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-primary"
           />
         </div>
@@ -106,7 +106,7 @@ export default function TermList({ navegar }: TermListProps) {
           <table className="w-full text-left">
             <thead>
               <tr className="border-b border-slate-200 text-xs text-slate-500 uppercase tracking-wider">
-                {['Processo / Objeto', 'Categoria', 'Valor Estimado', 'Acao'].map((h, i) => (
+                {['Processo / Objeto', 'Categoria', 'Valor Estimado', 'Ação'].map((h, i) => (
                   <th key={h} className={`p-4 font-semibold ${i === 3 ? 'text-right' : ''}`}>{h}</th>
                 ))}
               </tr>

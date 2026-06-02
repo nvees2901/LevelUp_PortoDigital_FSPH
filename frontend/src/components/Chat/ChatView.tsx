@@ -23,8 +23,8 @@ export default function ChatView({ navegar }: ChatViewProps) {
     return {
       de: 'ia',
       texto: isDemandante
-        ? 'Ola! Sou o Assistente COLIC da FSPH, treinado na Lei 14.133/2021 e nos fluxos internos. Posso ajudar voce a elaborar processos de contratacao ou analisar documentos. Como posso ajudar?'
-        : `Ola, ${usuario?.nomeUsuarioLogado}! Sou o Assistente COLIC. Posso responder duvidas sobre fluxos da COLIC, modalidades de contratacao, checklist documental e prazos legais. Como posso ajudar?`,
+        ? 'Olá! Sou o Assistente COLIC da FSPH, treinado na Lei 14.133/2021 e nos fluxos internos. Posso ajudar você a elaborar processos de contratação ou analisar documentos. Como posso ajudar?'
+        : `Olá, ${usuario?.nomeUsuarioLogado}! Sou o Assistente COLIC. Posso responder dúvidas sobre fluxos da COLIC, modalidades de contratação, checklist documental e prazos legais. Como posso ajudar?`,
     };
   }
 
@@ -78,7 +78,7 @@ export default function ChatView({ navegar }: ChatViewProps) {
       setAttachedTermId(null);
       setAttachedTermTitle(null);
     } catch {
-      addMsg('ia', 'Nao foi possivel carregar a sessao.');
+      addMsg('ia', 'Não foi possível carregar a sessão.');
     } finally {
       setLoadingSession(false);
     }
@@ -135,7 +135,7 @@ export default function ChatView({ navegar }: ChatViewProps) {
       addMsg('ia', res.message);
       loadSessions(mode);
     } catch (err) {
-      addMsg('ia', err instanceof Error ? err.message : 'Nao foi possivel contactar o assistente. Tente novamente.');
+      addMsg('ia', err instanceof Error ? err.message : 'Não foi possível contactar o assistente. Tente novamente.');
     } finally {
       setAnalisando(false);
     }
@@ -182,7 +182,7 @@ export default function ChatView({ navegar }: ChatViewProps) {
           ) : sessions.map(s => (
             <button key={s.id} onClick={() => loadSession(s.id)} disabled={loadingSession}
               className={`w-full text-left px-3 py-2 rounded-lg text-xs transition hover:bg-slate-100 disabled:opacity-60 ${s.id === sessionId ? 'bg-blue-50 border border-blue-200 text-brand-primary font-semibold' : 'text-slate-600'}`}>
-              <p className="truncate font-medium">{s.title ?? `Sessao ${s.id.slice(0, 8)}`}</p>
+              <p className="truncate font-medium">{s.title ?? `Sessão ${s.id.slice(0, 8)}`}</p>
               <p className="text-slate-400 text-[10px]">{s.message_count} msg • {s.updated_at.slice(0, 10)}</p>
             </button>
           ))}
@@ -199,7 +199,7 @@ export default function ChatView({ navegar }: ChatViewProps) {
             <div className="flex-1">
               <p className="font-bold text-sm">Assistente IA — COLIC/FSPH</p>
               <p className="text-xs text-blue-300">
-                {isDemandante ? 'Elaboracao guiada de processos' : 'Consulta sobre fluxos e legislacao'} • Lei 14.133/2021 • Decreto 342/2023
+                {isDemandante ? 'Elaboração guiada de processos' : 'Consulta sobre fluxos e legislação'} • Lei 14.133/2021 • Decreto 342/2023
               </p>
             </div>
             <div className="text-right text-xs">
@@ -232,7 +232,7 @@ export default function ChatView({ navegar }: ChatViewProps) {
           <div className="p-3 border-b border-slate-100 bg-slate-50">
             <p className="text-xs text-slate-500 font-medium mb-2">Perguntas frequentes:</p>
             <div className="flex flex-wrap gap-1.5">
-              {['Como funciona a Dispensa?', 'O que e o DFD?', 'Prazos contratuais', 'Fluxo COLIC/DIROP/DIRAF', 'O que e Inexigibilidade?'].map(q => (
+              {['Como funciona a Dispensa?', 'O que é o DFD?', 'Prazos contratuais', 'Fluxo COLIC/DIROP/DIRAF', 'O que é Inexigibilidade?'].map(q => (
                 <button key={q} onClick={() => setInput(q)}
                   className="text-xs px-2.5 py-1 bg-white border border-slate-200 rounded-full text-brand-primary hover:border-brand-primary hover:bg-blue-50 transition font-medium">
                   {q}
@@ -294,7 +294,7 @@ export default function ChatView({ navegar }: ChatViewProps) {
 
           <form onSubmit={enviar} className="flex gap-2 items-center">
             <input type="text" value={input} onChange={e => setInput(e.target.value)}
-              placeholder={isDemandante ? 'Descreva o objeto da contratacao...' : 'Faca sua pergunta sobre fluxos ou legislacao...'}
+              placeholder={isDemandante ? 'Descreva o objeto da contratação...' : 'Faça sua pergunta sobre fluxos ou legislação...'}
               className="flex-1 py-2 px-3 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-primary" />
             {mode === 'analisar' && (
               <button type="button" onClick={() => fileInputRef.current?.click()}

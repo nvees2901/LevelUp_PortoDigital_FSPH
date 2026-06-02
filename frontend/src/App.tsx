@@ -24,7 +24,7 @@ class ErrorBoundary extends Component<{ children: ReactNode }, { error: Error | 
       return (
         <div className="min-h-screen flex items-center justify-center bg-slate-100 p-8">
           <div className="bg-white rounded-xl shadow-lg p-8 max-w-lg w-full">
-            <h1 className="text-2xl font-bold text-red-600 mb-4">Erro na aplicacao</h1>
+            <h1 className="text-2xl font-bold text-red-600 mb-4">Erro na aplicação</h1>
             <p className="text-slate-600 mb-4">{this.state.error.message}</p>
             <pre className="bg-slate-100 p-4 rounded text-xs overflow-auto max-h-40 mb-4">
               {this.state.error.stack}
