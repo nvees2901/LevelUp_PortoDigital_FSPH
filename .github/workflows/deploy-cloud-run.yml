@@ -45,6 +45,7 @@ jobs:
             --platform managed \
             --region ${{ secrets.CLOUD_RUN_REGION }} \
             --allow-unauthenticated \
+            --port 8000 \
             --add-cloudsql-instances ${{ secrets.GCP_PROJECT }}:${{ secrets.CLOUD_RUN_REGION }}:fsph-db-pg \
             --set-env-vars "ENVIRONMENT=production" \
             --set-env-vars "DATABASE_URL=${DATABASE_URL}" \
