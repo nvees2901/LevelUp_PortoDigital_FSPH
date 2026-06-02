@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Search, Bot } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
-import { ETAPAS, statusColor, modalColor } from '../../constants';
+import { modalColor } from '../../constants';
 import { getTerms } from '../../services/api';
 import type { TermSummary, TermListResponse, TelaId } from '../../types';
 import { formatCurrency } from '../../utils';
@@ -20,9 +20,7 @@ export default function TermList({ navegar }: TermListProps) {
 
   const [busca, setBusca] = useState('');
   const [filtroCategoria, setFiltroCategoria] = useState('Todas');
-  const [filtroStatus, setFiltroStatus] = useState('Todos');
 
-  const statusOpts = ['Todos', ...ETAPAS];
   const categoryOpts = ['Todas', ...CATEGORIES];
 
   function fetchTerms() {
@@ -43,8 +41,7 @@ export default function TermList({ navegar }: TermListProps) {
       term.title.toLowerCase().includes(q) ||
       term.id.toLowerCase().includes(q);
     const matchCategoria = filtroCategoria === 'Todas' || term.category === filtroCategoria;
-    const matchStatus = filtroStatus === 'Todos' || term.status === filtroStatus;
-    return matchBusca && matchCategoria && matchStatus;
+    return matchBusca && matchCategoria;
   });
 
   return (
@@ -79,13 +76,6 @@ export default function TermList({ navegar }: TermListProps) {
         >
           {categoryOpts.map(c => <option key={c}>{c}</option>)}
         </select>
-        <select
-          value={filtroStatus}
-          onChange={e => setFiltroStatus(e.target.value)}
-          className="px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-brand-primary"
-        >
-          {statusOpts.map(s => <option key={s}>{s}</option>)}
-        </select>
       </div>
 
       {/* Conteudo */}
@@ -116,8 +106,8 @@ export default function TermList({ navegar }: TermListProps) {
           <table className="w-full text-left">
             <thead>
               <tr className="border-b border-slate-200 text-xs text-slate-500 uppercase tracking-wider">
-                {['Processo / Objeto', 'Categoria', 'Status', 'Valor Estimado', 'Acao'].map((h, i) => (
-                  <th key={h} className={`p-4 font-semibold ${i === 4 ? 'text-right' : ''}`}>{h}</th>
+                {['Processo / Objeto', 'Categoria', 'Valor Estimado', 'Acao'].map((h, i) => (
+                  <th key={h} className={`p-4 font-semibold ${i === 3 ? 'text-right' : ''}`}>{h}</th>
                 ))}
               </tr>
             </thead>
@@ -133,11 +123,6 @@ export default function TermList({ navegar }: TermListProps) {
                   <td className="p-4">
                     <span className={`text-xs font-bold px-2 py-0.5 rounded ${modalColor(term.category)}`}>
                       {term.category}
-                    </span>
-                  </td>
-                  <td className="p-4">
-                    <span className={`inline-flex px-2 py-0.5 rounded border text-xs font-semibold ${statusColor(term.status)}`}>
-                      {term.status}
                     </span>
                   </td>
                   <td className="p-4 text-sm text-slate-700">

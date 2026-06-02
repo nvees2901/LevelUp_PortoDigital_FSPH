@@ -3,25 +3,19 @@ import {
   ArrowLeft, CheckCircle, X, Download, Bot, AlertTriangle, FileCheck,
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
-import {
-  FLUXO, ETAPAS, CHECKLIST, SETORES, statusColor, modalColor,
-} from '../../constants';
+import { CHECKLIST, modalColor } from '../../constants';
 import { formatCurrency, formatDate, scoreColor } from '../../utils';
 import {
   getTerm,
   getAnalysesByTerm,
   getChecklist,
-  getHistorico,
   analyzeTerm,
   exportTermPdf,
-  avancarTermo,
-  devolverTermo,
 } from '../../services/api';
 import type {
   TermResponse,
   AnalysisResponse,
   TermChecklistOut,
-  WorkflowEventOut,
   TelaId,
 } from '../../types';
 
@@ -36,28 +30,24 @@ export default function TermDetail({ termId, navegar }: TermDetailProps) {
   const [term, setTerm] = useState<TermResponse | null>(null);
   const [analyses, setAnalyses] = useState<AnalysisResponse[]>([]);
   const [checklistData, setChecklistData] = useState<TermChecklistOut | null>(null);
-  const [historico, setHistorico] = useState<WorkflowEventOut[]>([]);
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [analyzingIA, setAnalyzingIA] = useState(false);
-  const [workflowLoading, setWorkflowLoading] = useState(false);
 
   const loadData = useCallback(async () => {
     if (!termId) return;
     setLoading(true);
     setError(null);
     try {
-      const [termData, analysesData, checklistRaw, historicoData] = await Promise.all([
+      const [termData, analysesData, checklistRaw] = await Promise.all([
         getTerm(termId),
         getAnalysesByTerm(termId),
         getChecklist(termId),
-        getHistorico(termId),
       ]);
       setTerm(termData);
       setAnalyses(analysesData);
       setChecklistData(checklistRaw);
-      setHistorico(historicoData);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Erro ao carregar dados do processo.');
     } finally {
@@ -82,7 +72,6 @@ export default function TermDetail({ termId, navegar }: TermDetailProps) {
           </div>
           <div className="space-y-5">
             <div className="bg-white rounded-xl border border-slate-200 shadow-sm h-48" />
-            <div className="bg-white rounded-xl border border-slate-200 shadow-sm h-80" />
           </div>
         </div>
       </div>
@@ -117,10 +106,6 @@ export default function TermDetail({ termId, navegar }: TermDetailProps) {
   if (!term) return null;
 
   // --- Derived values ---
-  const conf = FLUXO[term.status];
-  const podeAgir = conf?.ator != null && conf.ator === usuario.id;
-  const idxAtual = ETAPAS.indexOf(term.status);
-
   const ckOk = checklistData
     ? CHECKLIST.filter(doc => checklistData[doc.id as keyof TermChecklistOut] === true).length
     : 0;
@@ -158,35 +143,6 @@ export default function TermDetail({ termId, navegar }: TermDetailProps) {
     }
   };
 
-  const handleAvancar = async () => {
-    setWorkflowLoading(true);
-    try {
-      await avancarTermo(termId);
-      await loadData();
-    } catch (err) {
-      alert(err instanceof Error ? err.message : 'Erro ao avançar processo');
-    } finally {
-      setWorkflowLoading(false);
-    }
-  };
-
-  const handleDevolver = async () => {
-    const obs = window.prompt('Observação (obrigatória):');
-    if (!obs || obs.trim().length < 3) {
-      if (obs !== null) alert('A observação deve ter pelo menos 3 caracteres.');
-      return;
-    }
-    setWorkflowLoading(true);
-    try {
-      await devolverTermo(termId, obs.trim());
-      await loadData();
-    } catch (err) {
-      alert(err instanceof Error ? err.message : 'Erro ao devolver processo');
-    } finally {
-      setWorkflowLoading(false);
-    }
-  };
-
   return (
     <div className="max-w-6xl mx-auto pb-10">
       <button
@@ -207,9 +163,6 @@ export default function TermDetail({ termId, navegar }: TermDetailProps) {
                   <h1 className="text-xl font-black text-brand-primary">{term.title}</h1>
                   <span className={`text-xs font-bold px-2 py-0.5 rounded ${modalColor(term.category)}`}>
                     {term.category}
-                  </span>
-                  <span className={`text-xs font-semibold px-2 py-0.5 rounded border ${statusColor(term.status)}`}>
-                    {term.status}
                   </span>
                 </div>
               </div>
@@ -232,9 +185,8 @@ export default function TermDetail({ termId, navegar }: TermDetailProps) {
             </div>
 
             {/* Meta grid */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 p-3 bg-slate-50 rounded-lg text-xs mb-5 border border-slate-100">
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-3 p-3 bg-slate-50 rounded-lg text-xs mb-5 border border-slate-100">
               {[
-                { l: 'Status', v: term.status },
                 { l: 'Categoria', v: term.category },
                 { l: 'Valor Estimado', v: formatCurrency(term.estimated_value) },
                 { l: 'Criado em', v: formatDate(term.created_at) },
@@ -286,39 +238,6 @@ export default function TermDetail({ termId, navegar }: TermDetailProps) {
               </div>
             </div>
           </div>
-
-          {/* Historico */}
-          {historico.length > 0 && (
-            <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-5">
-              <h3 className="font-bold text-brand-primary text-xs uppercase tracking-wider mb-3">
-                Histórico de Tramitação
-              </h3>
-              <div className="space-y-2">
-                {historico.map(event => (
-                  <div key={event.id} className="flex gap-3 text-xs">
-                    <div className="w-1.5 h-1.5 rounded-full bg-brand-primary mt-1.5 shrink-0" />
-                    <div>
-                      <p className="font-semibold text-slate-700">
-                        {event.acao}
-                        {event.ator_nome && (
-                          <span className="text-slate-400 font-normal"> — {event.ator_nome}</span>
-                        )}
-                      </p>
-                      {event.de_setor && event.para_setor && (
-                        <p className="text-slate-400">
-                          {event.de_setor} → {event.para_setor}
-                        </p>
-                      )}
-                      {event.observacao && (
-                        <p className="text-slate-500 italic mt-0.5">"{event.observacao}"</p>
-                      )}
-                      <p className="text-slate-300 mt-0.5">{formatDate(event.created_at)}</p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
         </div>
 
         {/* PAINEL LATERAL */}
@@ -360,75 +279,6 @@ export default function TermDetail({ termId, navegar }: TermDetailProps) {
                 {analyzingIA ? 'Analisando...' : 'Solicitar Análise IA'}
               </button>
             </div>
-          </div>
-
-          {/* Fluxo COLIC */}
-          <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-4">
-            <h3 className="font-bold text-brand-primary text-xs uppercase tracking-wider border-b border-slate-100 pb-2 mb-4">
-              Fluxo COLIC/FSPH
-            </h3>
-            <div className="space-y-1.5 mb-5">
-              {ETAPAS.map((step, idx) => {
-                const isCur = term.status === step;
-                const isPast = idxAtual > idx;
-                return (
-                  <div
-                    key={step}
-                    className={`flex items-center gap-2 text-xs font-medium ${
-                      isCur ? 'opacity-100' : isPast ? 'opacity-65' : 'opacity-30'
-                    }`}
-                  >
-                    <div
-                      className={`w-5 h-5 rounded-full flex items-center justify-center shrink-0 text-xs font-bold
-                        ${isCur
-                          ? 'bg-brand-primary text-white ring-2 ring-blue-200 ring-offset-1 scale-110'
-                          : isPast
-                          ? 'bg-emerald-500 text-white'
-                          : 'bg-slate-200 text-slate-500'}`}
-                    >
-                      {isPast ? '✓' : idx + 1}
-                    </div>
-                    <span className={isCur ? 'text-brand-primary font-bold' : 'text-slate-500'}>
-                      {step}
-                    </span>
-                  </div>
-                );
-              })}
-            </div>
-
-            {podeAgir ? (
-              <div className="space-y-2">
-                <button
-                  onClick={handleAvancar}
-                  disabled={workflowLoading}
-                  className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-bold text-sm shadow transition flex justify-center items-center gap-2 disabled:opacity-60"
-                >
-                  <CheckCircle size={15} />
-                  {workflowLoading ? 'Processando...' : (conf?.acao ?? 'Avançar')}
-                </button>
-                <button
-                  onClick={handleDevolver}
-                  disabled={workflowLoading}
-                  className="w-full py-2 bg-white border border-red-300 hover:bg-red-50 text-red-600 rounded-lg font-bold text-xs transition disabled:opacity-60"
-                >
-                  ↩ Devolver para Ajustes
-                </button>
-              </div>
-            ) : (
-              <div className="p-3 bg-slate-50 rounded-lg text-center text-xs border border-slate-200">
-                {conf?.ator ? (
-                  <>
-                    Aguardando ação de:
-                    <br />
-                    <strong className="text-brand-primary text-sm block mt-0.5">
-                      {SETORES.find(s => s.id === conf.ator)?.nome}
-                    </strong>
-                  </>
-                ) : (
-                  <span className="text-emerald-700 font-bold">✓ Processo Homologado</span>
-                )}
-              </div>
-            )}
           </div>
         </div>
       </div>
