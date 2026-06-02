@@ -58,8 +58,10 @@ async def analyze_term(payload: AnalysisRequest, db: DbDep):
         "legal_references": compliance["legal_references"],
     })
 
-    # Atualiza status do TR
-    await TermRepository.update(db, str(term.id), {"status": compliance["status"]})
+    # O veredito da análise (aprovado/alerta/reprovado) fica no registro de
+    # análise; NÃO é gravado em term.status, que usa o enum próprio do termo
+    # (gravar o veredito ali quebrava o enum term_status). O fluxo de aprovação
+    # está fora do MVP.
 
     return AnalysisResponse.from_orm_analysis(analysis)
 
