@@ -42,6 +42,7 @@ jobs:
             --platform managed \
             --region ${{ secrets.CLOUD_RUN_REGION }} \
             --allow-unauthenticated \
+            --add-cloudsql-instances ${{ secrets.GCP_PROJECT }}:${{ secrets.CLOUD_RUN_REGION }}:fsph-db-pg \
             --set-env-vars "ENVIRONMENT=production,DATABASE_URL=${{ secrets.DATABASE_URL }},SECRET_KEY=${{ secrets.SECRET_KEY }},GCS_BUCKET=${{ secrets.GCS_BUCKET }}"
 
       - name: (optional) Run migrations (see DEPLOY_BACKEND.md)
