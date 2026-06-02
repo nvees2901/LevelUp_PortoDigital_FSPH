@@ -13,6 +13,7 @@ Por que um serviço separado?
 
 from __future__ import annotations
 
+import re
 import uuid
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -28,6 +29,26 @@ from app.utils.exceptions import NoAssistantContentError
 from app.utils.logging import get_logger
 
 logger = get_logger(__name__)
+
+
+def _title_from_content(content: str, fallback: str) -> str:
+    """Deriva um título limpo a partir da seção 'Objeto' do TR sintetizado.
+
+    Procura o cabeçalho de Objeto e usa a primeira linha de texto como título;
+    se não encontrar, usa o fallback (título da sessão).
+    """
+    lines = content.split("\n")
+    for i, ln in enumerate(lines):
+        if re.match(r"^#{1,6}\s", ln) and "objeto" in ln.lower():
+            for j in range(i + 1, min(i + 6, len(lines))):
+                t = lines[j].strip().lstrip("*").strip()
+                if not t or re.match(r"^#{1,6}\s", lines[j]):
+                    continue
+                if t.lower().startswith("art.") or t.lower().startswith("lei"):
+                    continue
+                return t.rstrip(".")[:140]
+            break
+    return fallback
 
 
 class ChatOrchestratorService:
@@ -99,6 +120,7 @@ class ChatOrchestratorService:
         db: AsyncSession,
         session: ChatSession,
         current_user: User,
+        content_override: str | None = None,
     ) -> str:
         """
         Cria um TR a partir do conteúdo gerado pelo assistente na sessão.
@@ -112,20 +134,33 @@ class ChatOrchestratorService:
         Raises:
             NoAssistantContentError: se a sessão não tem mensagem do assistente.
         """
-        last_assistant_content = ""
-        for msg in reversed(session.messages):
-            if msg.get("role") == "assistant":
-                last_assistant_content = msg.get("content", "")
-                break
+        from app.services.pdf_generator import clean_tr_content
 
-        if not last_assistant_content:
-            raise NoAssistantContentError()
+        if content_override is not None and content_override.strip():
+            # TR já sintetizado a partir de toda a conversa — usa direto.
+            tr_content = clean_tr_content(content_override)
+        else:
+            last_assistant_content = ""
+            for msg in reversed(session.messages):
+                if msg.get("role") == "assistant":
+                    last_assistant_content = msg.get("content", "")
+                    break
+            if not last_assistant_content:
+                raise NoAssistantContentError()
+            tr_content = clean_tr_content(last_assistant_content)
+
+        # Título do TR: usa o objeto descrito pelo usuário (título da sessão,
+        # definido a partir da 1ª mensagem) em vez do UUID da sessão.
+        raw_title = (session.title or "").strip()
+        fallback_title = raw_title[:140] if raw_title else "Termo de Referência gerado via Chat"
+        # Prefere um título limpo derivado da seção "Objeto" do TR.
+        term_title = _title_from_content(tr_content, fallback_title)
 
         term = await TermRepository.create(db, {
-            "title": f"TR gerado via Chat — {session.id}",
+            "title": term_title,
             "category": "outro",
             "status": "Rascunho",
-            "content": last_assistant_content,
+            "content": tr_content,
             "created_by_id": current_user.id,
         })
         session.generated_term_id = term.id
