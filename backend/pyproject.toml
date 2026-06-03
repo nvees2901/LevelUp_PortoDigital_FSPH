@@ -33,6 +33,8 @@ dependencies = [
     "pyjwt>=2.9.0",            # geração e verificação de JWT
     # --- Utilitários ---
     "aiofiles>=24.0.0",     # leitura/escrita async de arquivos
+    "anyio>=4.0.0",         # async I/O usado pelo context_loader
+    "google-cloud-storage>=3.0.0",  # GCS storage
     # --- RAG / Banco Vetorial ---
     "chromadb>=0.6.0",                     # cliente HTTP para ChromaDB server (Docker)
     "olefile>=0.47",
