@@ -4,7 +4,7 @@ import {
   ShieldCheck, ShieldAlert, ShieldX, FileText, MessageSquare, Pencil,
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
-import { modalColor } from '../../constants';
+import { modalColor, categoryLabel } from '../../constants';
 import { formatCurrency, formatDate, scoreColor } from '../../utils';
 import {
   getTerm,
@@ -204,7 +204,7 @@ export default function TermDetail({ termId, navegar }: TermDetailProps) {
               <div className="min-w-0">
                 <p className="section-title mb-1">Termo de Referência</p>
                 <h1 className="text-xl font-black text-brand-primary leading-tight">{term.title}</h1>
-                <span className={`badge mt-2 ${modalColor(term.category)}`}>{term.category}</span>
+                <span className={`badge mt-2 ${modalColor(term.category)}`}>{categoryLabel(term.category)}</span>
               </div>
               <div className="flex gap-2 shrink-0">
                 <button onClick={abrirEdicao} className="btn btn-ghost btn-sm" title="Editar dados do processo">
@@ -222,7 +222,7 @@ export default function TermDetail({ termId, navegar }: TermDetailProps) {
             {/* Meta */}
             <div className="grid grid-cols-2 md:grid-cols-3 gap-3 p-3.5 bg-slate-50 rounded-lg text-xs mb-6 border border-slate-100">
               {[
-                { l: 'Categoria', v: term.category },
+                { l: 'Categoria', v: categoryLabel(term.category) },
                 { l: 'Valor Estimado', v: formatCurrency(term.estimated_value) },
                 { l: 'Criado em', v: formatDate(term.created_at) },
               ].map(item => (

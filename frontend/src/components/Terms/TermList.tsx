@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Search, Bot, FileSearch, AlertCircle, ChevronRight } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
-import { modalColor } from '../../constants';
+import { modalColor, categoryLabel } from '../../constants';
 import { getTerms } from '../../services/api';
 import type { TermSummary, TermListResponse, TelaId } from '../../types';
 import { formatCurrency } from '../../utils';
@@ -145,7 +145,7 @@ export default function TermList({ navegar }: TermListProps) {
                     </td>
                     <td className="px-5 py-4">
                       <span className={`badge ${modalColor(term.category)}`}>
-                        {term.category}
+                        {categoryLabel(term.category)}
                       </span>
                     </td>
                     <td className="px-5 py-4 text-sm font-medium text-slate-700">

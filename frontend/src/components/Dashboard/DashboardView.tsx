@@ -3,7 +3,7 @@ import {
   FileText, Clock, AlertTriangle,
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
-import { modalColor } from '../../constants';
+import { modalColor, categoryLabel } from '../../constants';
 import { getDashboardStats } from '../../services/api';
 import type { DashboardStats, TelaId } from '../../types';
 import { formatDate } from '../../utils';
@@ -124,7 +124,7 @@ export default function DashboardView({ navegar }: DashboardViewProps) {
                       <p className="text-slate-400 font-mono">{term.id.slice(0, 8)}…</p>
                     </td>
                     <td className="px-4 py-3">
-                      <span className={`px-2 py-0.5 rounded font-semibold ${modalColor(term.category)}`}>{term.category}</span>
+                      <span className={`px-2 py-0.5 rounded font-semibold ${modalColor(term.category)}`}>{categoryLabel(term.category)}</span>
                     </td>
                     <td className="px-4 py-3 text-slate-500">
                       {formatDate(term.created_at)}
