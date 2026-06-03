@@ -241,8 +241,38 @@ export interface WorkflowEventOut {
   created_at: string;
 }
 
+// Admin: Users
+export interface UserAdminOut {
+  id: string;
+  matricula: string;
+  nome: string;
+  setor_id: SetorId;
+  subunidade: string | null;
+  is_admin: boolean;
+  ativo: boolean;
+  created_at: string;
+}
+
+export interface UserCreate {
+  matricula: string;
+  nome: string;
+  senha: string;
+  setor_id: SetorId;
+  subunidade?: string | null;
+  is_admin?: boolean;
+}
+
+export interface UserUpdate {
+  nome?: string;
+  senha?: string;
+  setor_id?: SetorId;
+  subunidade?: string | null;
+  is_admin?: boolean;
+  ativo?: boolean;
+}
+
 // Navigation
-export type TelaId = 'dashboard' | 'lista' | 'detalhe' | 'chat' | 'analise' | 'admin';
+export type TelaId = 'dashboard' | 'lista' | 'detalhe' | 'chat' | 'analise' | 'admin' | 'usuarios';
 
 export interface MensagemChat {
   de: 'ia' | 'user';

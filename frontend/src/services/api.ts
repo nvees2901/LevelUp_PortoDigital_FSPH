@@ -15,9 +15,17 @@ import type {
   KnowledgeBaseCollectionList,
   TermChecklistOut,
   WorkflowEventOut,
+  UserAdminOut,
+  UserCreate,
+  UserUpdate,
 } from '../types';
 
-const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000/api/v1';
+function normalizeApiBase(url: string): string {
+  const trimmed = url.trim().replace(/\/+$|\/$/g, '');
+  return trimmed.endsWith('/api/v1') ? trimmed : `${trimmed}/api/v1`;
+}
+
+export const API_BASE = normalizeApiBase(import.meta.env.VITE_API_URL || 'http://localhost:8000');
 
 export class ApiError extends Error {
   constructor(public status: number, message: string, public detail?: string) {
@@ -300,4 +308,28 @@ export async function getKnowledgeBaseCollections(): Promise<KnowledgeBaseCollec
 export async function listChatSessions(mode?: ChatMode): Promise<ChatSessionListResponse> {
   const qs = mode ? `?mode=${encodeURIComponent(mode)}` : '';
   return request<ChatSessionListResponse>(`/chat/sessions${qs}`);
+}
+
+// --- Admin: Users ---
+
+export async function listUsers(): Promise<UserAdminOut[]> {
+  return request<UserAdminOut[]>('/admin/users');
+}
+
+export async function createUser(data: UserCreate): Promise<UserAdminOut> {
+  return request<UserAdminOut>('/admin/users', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+}
+
+export async function updateUser(id: string, data: UserUpdate): Promise<UserAdminOut> {
+  return request<UserAdminOut>(`/admin/users/${id}`, {
+    method: 'PUT',
+    body: JSON.stringify(data),
+  });
+}
+
+export async function deleteUser(id: string): Promise<void> {
+  return request<void>(`/admin/users/${id}`, { method: 'DELETE' });
 }

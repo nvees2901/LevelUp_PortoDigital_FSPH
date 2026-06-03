@@ -1,6 +1,10 @@
 """
 admin.py (route) — Endpoints de gerenciamento para administradores
 
+POST   /api/v1/admin/users                         → criar usuário
+GET    /api/v1/admin/users                         → listar usuários
+PUT    /api/v1/admin/users/{id}                    → atualizar usuário
+DELETE /api/v1/admin/users/{id}                    → desativar usuário
 POST   /api/v1/admin/context-documents              → upload de documento de contexto
 GET    /api/v1/admin/context-documents              → listar documentos de contexto
 DELETE /api/v1/admin/context-documents/{id}        → remover documento de contexto
@@ -10,27 +14,30 @@ GET    /api/v1/admin/knowledge-base/collections    → estatísticas das coleç�
 """
 
 import asyncio
-import os
+import io
 import uuid
 from pathlib import Path
 from typing import Annotated
 
-import aiofiles
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, UploadFile, status
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.core.database import get_db
 from app.core.security import AdminUser
 from app.repositories.context_document import ContextDocumentRepository
+from app.repositories.user import UserRepository
 from app.schemas.context_document import (
     ContextDocumentList,
     ContextDocumentResponse,
     KnowledgeBaseCollection,
     KnowledgeBaseCollectionList,
 )
+from app.schemas.user import UserAdminOut, UserCreate, UserUpdate
+from app.services.auth import hash_password
 from app.services.rag_service import RagService
+from app.services.storage import delete as delete_storage, exists as storage_exists, read_bytes, save_context_document
 from app.utils.logging import get_logger
 
 logger = get_logger(__name__)
@@ -40,6 +47,75 @@ router = APIRouter(prefix="/admin", tags=["Admin"])
 DbDep = Annotated[AsyncSession, Depends(get_db)]
 
 ALLOWED_EXTENSIONS = {".pdf", ".docx", ".doc"}
+
+
+# ------------------------------------------------------------------ #
+# Gerenciamento de Usuários
+# ------------------------------------------------------------------ #
+
+@router.get("/users", response_model=list[UserAdminOut])
+async def list_users(db: DbDep, current_user: AdminUser):
+    """Lista todos os usuários cadastrados."""
+    return await UserRepository.list_all(db)
+
+
+@router.post("/users", response_model=UserAdminOut, status_code=201)
+async def create_user(payload: UserCreate, db: DbDep, current_user: AdminUser):
+    """Cria um novo usuário no sistema."""
+    existing = await UserRepository.get_by_matricula(db, payload.matricula)
+    if existing:
+        raise HTTPException(status_code=409, detail="Matrícula já cadastrada.")
+
+    user = await UserRepository.create(db, {
+        "matricula": payload.matricula,
+        "nome": payload.nome,
+        "senha_hash": hash_password(payload.senha),
+        "setor_id": payload.setor_id,
+        "subunidade": payload.subunidade,
+        "is_admin": payload.is_admin,
+    })
+    await db.commit()
+    await db.refresh(user)
+    return user
+
+
+@router.put("/users/{user_id}", response_model=UserAdminOut)
+async def update_user(user_id: str, payload: UserUpdate, db: DbDep, current_user: AdminUser):
+    """Atualiza dados de um usuário."""
+    user = await UserRepository.get_by_id(db, user_id)
+    if not user:
+        raise HTTPException(status_code=404, detail="Usuário não encontrado.")
+
+    updates: dict = {}
+    if payload.nome is not None:
+        updates["nome"] = payload.nome
+    if payload.senha is not None:
+        updates["senha_hash"] = hash_password(payload.senha)
+    if payload.setor_id is not None:
+        updates["setor_id"] = payload.setor_id
+    if payload.subunidade is not None:
+        updates["subunidade"] = payload.subunidade
+    if payload.is_admin is not None:
+        updates["is_admin"] = payload.is_admin
+    if payload.ativo is not None:
+        updates["ativo"] = payload.ativo
+
+    user = await UserRepository.update(db, user, updates)
+    await db.commit()
+    await db.refresh(user)
+    return user
+
+
+@router.delete("/users/{user_id}", status_code=204)
+async def deactivate_user(user_id: str, db: DbDep, current_user: AdminUser):
+    """Desativa um usuário (não remove do banco)."""
+    user = await UserRepository.get_by_id(db, user_id)
+    if not user:
+        raise HTTPException(status_code=404, detail="Usuário não encontrado.")
+    if str(user.id) == str(current_user.id):
+        raise HTTPException(status_code=400, detail="Você não pode desativar seu próprio usuário.")
+    await UserRepository.update(db, user, {"ativo": False})
+    await db.commit()
 
 
 async def _run_indexing_task(doc_id: str, storage_path: str, filename: str) -> None:
@@ -86,16 +162,11 @@ async def upload_context_document(
             detail=f"Arquivo muito grande: {size_bytes / 1024 / 1024:.1f} MB. Máximo: {settings.CONTEXT_DOC_MAX_SIZE_MB} MB",
         )
 
-    storage_dir = Path(settings.CONTEXT_DOCS_DIR)
-    storage_dir.mkdir(parents=True, exist_ok=True)
-    unique_filename = f"{uuid.uuid4()}{ext}"
-    storage_path = str(storage_dir / unique_filename)
-
-    async with aiofiles.open(storage_path, "wb") as f:
-        await f.write(file_bytes)
+    storage_path = await save_context_document(file_bytes, filename)
+    doc_filename = Path(storage_path).name if not storage_path.lower().startswith("gs://") else storage_path.split("/")[-1]
 
     doc = await ContextDocumentRepository.create(db, {
-        "filename": unique_filename,
+        "filename": doc_filename,
         "original_filename": filename,
         "mime_type": file.content_type or "application/octet-stream",
         "size_bytes": size_bytes,
@@ -155,10 +226,7 @@ async def delete_context_document(doc_id: str, db: DbDep, current_user: AdminUse
     if not doc:
         raise HTTPException(status_code=404, detail="Documento não encontrado.")
 
-    try:
-        await asyncio.to_thread(os.remove, doc.storage_path)
-    except FileNotFoundError:
-        logger.warning("Arquivo não encontrado ao deletar: %s", doc.storage_path)
+    await delete_storage(doc.storage_path)
 
     await asyncio.to_thread(RagService.remove_document_chunks, doc.filename)
 
@@ -178,7 +246,7 @@ async def reindex_context_document(
     if not doc:
         raise HTTPException(status_code=404, detail="Documento não encontrado.")
 
-    if not Path(doc.storage_path).exists():
+    if not await storage_exists(doc.storage_path):
         raise HTTPException(
             status_code=410,
             detail="Arquivo físico não encontrado no storage. Remova e faça upload novamente.",
@@ -212,10 +280,17 @@ async def download_context_document(doc_id: str, db: DbDep, current_user: AdminU
     if not doc:
         raise HTTPException(status_code=404, detail="Documento não encontrado.")
 
-    if not Path(doc.storage_path).exists():
+    if not await storage_exists(doc.storage_path):
         raise HTTPException(
             status_code=410,
             detail="Arquivo físico não encontrado no storage.",
+        )
+    if doc.storage_path.lower().startswith("gs://"):
+        file_bytes = await read_bytes(doc.storage_path)
+        return StreamingResponse(
+            io.BytesIO(file_bytes),
+            media_type=doc.mime_type,
+            headers={"Content-Disposition": f"attachment; filename=\"{doc.original_filename}\""},
         )
 
     return FileResponse(
