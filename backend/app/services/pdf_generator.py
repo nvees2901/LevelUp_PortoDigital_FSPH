@@ -139,6 +139,29 @@ def clean_tr_content(md: str) -> str:
     return "\n\n".join(blocks).strip()
 
 
+def format_brl(value) -> str:
+    """Formata um valor como moeda brasileira (R$ 1.234,56)."""
+    from decimal import Decimal, InvalidOperation
+    try:
+        v = Decimal(str(value))
+    except (InvalidOperation, TypeError, ValueError):
+        return ""
+    return f"R$ {v:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+
+
+def sync_estimated_value(content: str, value) -> str:
+    """Sincroniza o valor estimado do metadado no texto do TR: substitui a
+    primeira ocorrência de 'R$ ...' pelo valor informado. Se o metadado não
+    tiver valor, o texto é mantido como está."""
+    if value is None or not content:
+        return content
+    formatted = format_brl(value)
+    if not formatted:
+        return content
+    new, n = re.subn(r"R\$\s*[\d][\d.,]*", formatted, content, count=1)
+    return new if n else content
+
+
 class PDFGeneratorService:
 
     # ------------------------------------------------------------------ #
@@ -183,6 +206,7 @@ class PDFGeneratorService:
             story.extend(cls._build_sections(sections, styles))
         else:
             content = (term_data.get("content") or "").strip()
+            content = sync_estimated_value(content, term_data.get("estimated_value"))
             if content:
                 story.extend(cls._render_markdown(content, styles))
             else:

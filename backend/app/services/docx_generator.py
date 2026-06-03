@@ -13,7 +13,7 @@ from docx.enum.table import WD_TABLE_ALIGNMENT
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.shared import Pt, RGBColor
 
-from app.services.pdf_generator import clean_tr_content
+from app.services.pdf_generator import clean_tr_content, sync_estimated_value
 from app.utils.logging import get_logger
 
 logger = get_logger(__name__)
@@ -71,6 +71,7 @@ class DocxGeneratorService:
 
         # --- Corpo (markdown) ---
         content = clean_tr_content(term_data.get("content") or "")
+        content = sync_estimated_value(content, term_data.get("estimated_value"))
         if content.strip():
             cls._render_markdown(doc, content)
         else:
