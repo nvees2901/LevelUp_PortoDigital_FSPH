@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { UserPlus, Pencil, UserX, UserCheck, X, Loader2 } from 'lucide-react';
 import { SETORES, SUBUNIDADES } from '../../constants';
-import { listUsers, createUser, updateUser, deleteUser } from '../../services/api';
+import { listUsers, createUser, updateUser, deleteUser, deleteUserPermanently } from '../../services/api';
 import type { UserAdminOut, UserCreate, UserUpdate, SetorId, TelaId } from '../../types';
 
 interface UsersViewProps {
@@ -31,6 +31,8 @@ interface ModalProps {
 function UserModal({ user, onClose, onSaved }: ModalProps) {
   const isEditing = !!user;
   const [loading, setLoading] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const [form, setForm] = useState({
@@ -217,6 +219,56 @@ function UserModal({ user, onClose, onSaved }: ModalProps) {
               {isEditing ? 'Salvar Alterações' : 'Criar Usuário'}
             </button>
           </div>
+
+          {isEditing && (
+            <div className="pt-3 border-t border-slate-100 mt-1">
+              {!confirmDelete ? (
+                <button
+                  type="button"
+                  onClick={() => setConfirmDelete(true)}
+                  className="w-full px-4 py-2 text-red-600 border border-red-200 rounded-lg text-sm hover:bg-red-50 transition-colors"
+                >
+                  Excluir usuário permanentemente
+                </button>
+              ) : (
+                <div className="space-y-2">
+                  <p className="text-xs text-red-600 text-center font-medium">
+                    Tem certeza? Esta ação não pode ser desfeita.
+                  </p>
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setConfirmDelete(false)}
+                      className="flex-1 px-3 py-2 border border-slate-300 rounded-lg text-sm text-slate-600 hover:bg-slate-50"
+                    >
+                      Cancelar
+                    </button>
+                    <button
+                      type="button"
+                      disabled={deleting}
+                      onClick={async () => {
+                        if (!user) return;
+                        setDeleting(true);
+                        try {
+                          await deleteUserPermanently(user.id);
+                          onSaved();
+                          onClose();
+                        } catch {
+                          setError('Erro ao excluir usuário.');
+                          setDeleting(false);
+                          setConfirmDelete(false);
+                        }
+                      }}
+                      className="flex-1 px-3 py-2 bg-red-600 text-white rounded-lg text-sm font-semibold hover:bg-red-700 disabled:opacity-60 flex items-center justify-center gap-2"
+                    >
+                      {deleting && <Loader2 size={13} className="animate-spin" />}
+                      Sim, excluir
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
         </form>
       </div>
     </div>

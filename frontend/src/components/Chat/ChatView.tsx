@@ -42,6 +42,7 @@ export default function ChatView({ navegar }: ChatViewProps) {
   const [attachedTermId, setAttachedTermId] = useState<string | null>(null);
   const [attachedTermTitle, setAttachedTermTitle] = useState<string | null>(null);
   const [uploadingFile, setUploadingFile] = useState(false);
+  const [hoveredSession, setHoveredSession] = useState<string | null>(null);
 
   const endRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -199,7 +200,12 @@ export default function ChatView({ navegar }: ChatViewProps) {
               <p className="text-xs">Nenhuma conversa anterior.</p>
             </div>
           ) : sessions.map(s => (
-            <div key={s.id} className="relative group">
+            <div
+              key={s.id}
+              className="relative"
+              onMouseEnter={() => setHoveredSession(s.id)}
+              onMouseLeave={() => setHoveredSession(null)}
+            >
               <button onClick={() => loadSession(s.id)} disabled={loadingSession}
                 className={`w-full text-left px-3 py-2 pr-7 rounded-lg text-xs transition-colors disabled:opacity-60
                   ${s.id === sessionId
@@ -208,13 +214,15 @@ export default function ChatView({ navegar }: ChatViewProps) {
                 <p className="truncate font-medium">{s.title ?? `Sessão ${s.id.slice(0, 8)}`}</p>
                 <p className="text-slate-400 text-[10px] mt-0.5">{s.message_count} msg • {s.updated_at.slice(0, 10)}</p>
               </button>
-              <button
-                onClick={(e) => handleDeleteSession(e, s.id)}
-                className="absolute top-1/2 right-1.5 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity p-0.5 rounded text-slate-400 hover:text-red-500 hover:bg-red-50"
-                title="Remover conversa"
-              >
-                <Minus size={11} />
-              </button>
+              {hoveredSession === s.id && (
+                <button
+                  onClick={(e) => handleDeleteSession(e, s.id)}
+                  className="absolute top-1/2 right-1.5 -translate-y-1/2 p-0.5 rounded text-slate-400 hover:text-red-500 hover:bg-red-50"
+                  title="Remover conversa"
+                >
+                  <Minus size={11} />
+                </button>
+              )}
             </div>
           ))}
         </div>

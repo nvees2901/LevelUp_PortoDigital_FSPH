@@ -413,3 +413,7 @@ export async function updateUser(id: string, data: UserUpdate): Promise<UserAdmi
 export async function deleteUser(id: string): Promise<void> {
   return request<void>(`/admin/users/${id}`, { method: 'DELETE' });
 }
+
+export async function deleteUserPermanently(id: string): Promise<void> {
+  return request<void>(`/admin/users/${id}/permanently`, { method: 'DELETE' });
+}

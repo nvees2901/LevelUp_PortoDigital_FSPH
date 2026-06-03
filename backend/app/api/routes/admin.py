@@ -127,6 +127,18 @@ async def deactivate_user(user_id: str, db: DbDep, current_user: AdminUser):
     await db.commit()
 
 
+@router.delete("/users/{user_id}/permanently", status_code=204)
+async def delete_user_permanently(user_id: str, db: DbDep, current_user: AdminUser):
+    """Remove o usuário permanentemente do banco."""
+    user = await UserRepository.get_by_id(db, user_id)
+    if not user:
+        raise HTTPException(status_code=404, detail="Usuário não encontrado.")
+    if str(user.id) == str(current_user.id):
+        raise HTTPException(status_code=400, detail="Você não pode excluir seu próprio usuário.")
+    await UserRepository.delete(db, user)
+    await db.commit()
+
+
 # ------------------------------------------------------------------ #
 # Gerenciamento de Documentos de Contexto
 # ------------------------------------------------------------------ #
