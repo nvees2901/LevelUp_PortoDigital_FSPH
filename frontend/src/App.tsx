@@ -24,7 +24,7 @@ class ErrorBoundary extends Component<{ children: ReactNode }, { error: Error | 
       return (
         <div className="min-h-screen flex items-center justify-center bg-slate-100 p-8">
           <div className="bg-white rounded-xl shadow-lg p-8 max-w-lg w-full">
-            <h1 className="text-2xl font-bold text-red-600 mb-4">Erro na aplicacao</h1>
+            <h1 className="text-2xl font-bold text-red-600 mb-4">Erro na aplicação</h1>
             <p className="text-slate-600 mb-4">{this.state.error.message}</p>
             <pre className="bg-slate-100 p-4 rounded text-xs overflow-auto max-h-40 mb-4">
               {this.state.error.stack}
@@ -79,12 +79,14 @@ function AppContent() {
   };
 
   return (
-    <div className="flex flex-col h-screen bg-slate-100 overflow-hidden font-ui">
+    <div className="flex flex-col h-screen bg-slate-50 overflow-hidden font-ui text-slate-700">
       <Header />
       <div className="flex flex-1 overflow-hidden">
         <Sidebar telaAtual={telaAtual} navegar={navegar} />
-        <main className="flex-1 overflow-auto p-5 bg-slate-100/60">
-          {renderConteudoPrincipal()}
+        <main className="flex-1 overflow-auto bg-slate-50">
+          <div key={telaAtual} className="animate-fade-in p-5 md:p-6">
+            {renderConteudoPrincipal()}
+          </div>
         </main>
       </div>
     </div>

@@ -18,9 +18,12 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
+from app.core.security import CurrentUser
 from app.repositories.analysis import AnalysisRepository
 from app.repositories.term import TermRepository
+from app.repositories.user import UserRepository
 from app.schemas.term import TermCreate, TermListResponse, TermResponse, TermSummary, TermUpdate
+from app.services.docx_generator import DocxGeneratorService
 from app.services.pdf_generator import PDFGeneratorService
 from app.utils.exceptions import DocumentNotFoundError
 
@@ -30,12 +33,13 @@ DbDep = Annotated[AsyncSession, Depends(get_db)]
 
 
 @router.post("", response_model=TermResponse, status_code=201)
-async def create_term(payload: TermCreate, db: DbDep):
+async def create_term(payload: TermCreate, db: DbDep, current_user: CurrentUser):
     """
     Cria um Termo de Referência manualmente (HU-05).
     Para criação via upload de documentos, use POST /upload.
     """
     data = payload.model_dump(exclude_none=True)
+    data["created_by_id"] = current_user.id  # atribui o criador (assinatura)
     term = await TermRepository.create(db, data)
     return TermResponse.model_validate(term)
 
@@ -96,18 +100,21 @@ async def delete_term(term_id: str, db: DbDep):
         raise DocumentNotFoundError(term_id)
 
 
-@router.get("/{term_id}/export/pdf")
-async def export_term_pdf(term_id: str, db: DbDep):
-    """
-    Exporta um TR em PDF formatado com cabeçalho FSPH (HU-02, HU-03).
-    Retorna um arquivo PDF para download imediato.
-    """
-    term = await TermRepository.get_by_id(db, term_id)
-    if not term:
-        raise DocumentNotFoundError(term_id)
+_SETOR_LABELS = {
+    "demandante": "Área Demandante", "dirop": "DIROP", "diraf": "DIRAF",
+    "diger": "DIGER", "colic": "COLIC", "juridico": "Assessoria Jurídica",
+}
 
-    # Busca a análise mais recente para incluir no PDF (se existir)
-    term_dict = {
+
+async def _build_export_dict(db, term, fallback_user) -> dict:
+    """Monta os dados de export do TR. A assinatura 'Responsável pela
+    elaboração' usa SEMPRE quem CRIOU o TR (created_by_id); se não houver,
+    cai para o usuário atual."""
+    elaborador = None
+    if getattr(term, "created_by_id", None):
+        elaborador = await UserRepository.get_by_id(db, str(term.created_by_id))
+    elaborador = elaborador or fallback_user
+    return {
         "id": str(term.id),
         "title": term.title,
         "category": term.category,
@@ -117,16 +124,60 @@ async def export_term_pdf(term_id: str, db: DbDep):
         "estimated_value": term.estimated_value,
         "original_filename": term.original_filename,
         "created_at": str(term.created_at),
+        "elaborador_nome": getattr(elaborador, "nome", None),
+        "elaborador_matricula": getattr(elaborador, "matricula", None),
+        "elaborador_setor": _SETOR_LABELS.get(
+            getattr(elaborador, "setor_id", ""), getattr(elaborador, "setor_id", "")
+        ),
     }
 
-    pdf_bytes = PDFGeneratorService.generate_term_pdf(term_dict)
 
-    # Nome do arquivo para download
-    safe_title = "".join(c for c in term.title[:40] if c.isalnum() or c in " -_")
-    filename = f"TR_{safe_title.replace(' ', '_')}.pdf"
+def _safe_filename(title: str, ext: str) -> str:
+    safe = "".join(c for c in title[:40] if c.isalnum() or c in " -_").strip()
+    return f"TR_{safe.replace(' ', '_') or 'documento'}.{ext}"
+
+
+@router.get("/{term_id}/export/pdf")
+async def export_term_pdf(
+    term_id: str, db: DbDep, current_user: CurrentUser,
+    autoridade: str | None = None, autoridade_cargo: str | None = None,
+):
+    """Exporta um TR em PDF formatado com cabeçalho FSPH (HU-02, HU-03)."""
+    term = await TermRepository.get_by_id(db, term_id)
+    if not term:
+        raise DocumentNotFoundError(term_id)
+
+    term_dict = await _build_export_dict(db, term, current_user)
+    term_dict["autoridade_nome"] = autoridade
+    term_dict["autoridade_cargo"] = autoridade_cargo
+    pdf_bytes = PDFGeneratorService.generate_term_pdf(term_dict)
+    filename = _safe_filename(term.title, "pdf")
 
     return StreamingResponse(
         iter([pdf_bytes]),
         media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@router.get("/{term_id}/export/docx")
+async def export_term_docx(
+    term_id: str, db: DbDep, current_user: CurrentUser,
+    autoridade: str | None = None, autoridade_cargo: str | None = None,
+):
+    """Exporta o TR em DOCX (Word) editável, mesma estrutura formal do PDF."""
+    term = await TermRepository.get_by_id(db, term_id)
+    if not term:
+        raise DocumentNotFoundError(term_id)
+
+    term_dict = await _build_export_dict(db, term, current_user)
+    term_dict["autoridade_nome"] = autoridade
+    term_dict["autoridade_cargo"] = autoridade_cargo
+    docx_bytes = DocxGeneratorService.generate_term_docx(term_dict)
+    filename = _safe_filename(term.title, "docx")
+
+    return StreamingResponse(
+        iter([docx_bytes]),
+        media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )

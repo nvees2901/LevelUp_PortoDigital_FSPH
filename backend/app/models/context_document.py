@@ -105,9 +105,9 @@ class ContextDocument(Base):
     collection: Mapped[str] = mapped_column(
         VARCHAR(40),
         nullable=False,
-        default="context_extra",
-        server_default=text("'context_extra'"),
-        comment="Coleção ChromaDB alvo: context_extra | lei_14133 | termos_aprovados",
+        default="prompt",
+        server_default=text("'prompt'"),
+        comment="Categoria de destino: prompt | tr",
     )
     is_seed: Mapped[bool] = mapped_column(
         Boolean(),

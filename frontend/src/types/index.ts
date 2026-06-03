@@ -24,6 +24,7 @@ export interface UsuarioAtual {
   nomeUsuarioLogado: string;
   subunidade?: string;
   is_admin?: boolean;
+  matricula?: string;
 }
 
 // Auth — espelha os schemas Pydantic do backend

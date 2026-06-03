@@ -57,3 +57,13 @@ export function modalColor(m: string): string {
   if (m === 'servico_tecnico') return 'bg-orange-100 text-orange-800';
   return 'bg-slate-100 text-slate-700';
 }
+
+export function categoryLabel(c: string): string {
+  switch (c) {
+    case 'capacitacao':     return 'Capacitação';
+    case 'aquisicao':       return 'Aquisição';
+    case 'servico_tecnico': return 'Serviço Técnico';
+    case 'outro':           return 'Outro';
+    default:                return c;
+  }
+}

@@ -31,6 +31,7 @@ from app.schemas.chat import (
 )
 from app.services.ai_chat import AIChatService, AINotConfiguredError, AIProviderError
 from app.services.chat_orchestrator import ChatOrchestratorService
+from app.services.context_loader import load_context
 from app.utils.logging import get_logger
 
 logger = get_logger(__name__)
@@ -78,6 +79,7 @@ async def send_message(payload: ChatRequest, db: DbDep, current_user: CurrentUse
             mode=session.mode,
             history=history,
             term_content=term_content,
+            extra_context=await load_context(db, "prompt"),
         )
     except AINotConfiguredError as e:
         raise HTTPException(status_code=503, detail=str(e))
@@ -89,13 +91,10 @@ async def send_message(payload: ChatRequest, db: DbDep, current_user: CurrentUse
     session.add_message("assistant", ai_result["content"])
     await db.flush()
 
-    # --- Se TR foi gerado, salva-o ---
+    # O TR NÃO é criado automaticamente durante a conversa. A geração final
+    # acontece apenas via POST /chat/{id}/finalize, que sintetiza o TR completo
+    # a partir de toda a conversa (botão "Gerar TR").
     generated_term_id = None
-    if ai_result.get("term_complete") and session.mode == "gerar":
-        generated_term_id = await ChatOrchestratorService.persist_term_from_session(
-            db, session, current_user
-        )
-        logger.info("TR gerado via chat: term_id=%s session_id=%s", generated_term_id, session.id)
 
     return ChatResponse(
         message=ai_result["content"],
@@ -227,9 +226,22 @@ async def finalize_session(session_id: str, db: DbDep, current_user: CurrentUser
     if session.generated_term_id:
         return ChatFinalizeResponse(term_id=str(session.generated_term_id))
 
-    # --- Cria o TR a partir do conteúdo da sessão ---
-    term_id = await ChatOrchestratorService.persist_term_from_session(db, session, current_user)
-    logger.info("Sessão finalizada manualmente: term_id=%s session_id=%s", term_id, session_id)
+    # --- Sintetiza o TR final a partir de TODA a conversa ---
+    # Em vez de copiar a última mensagem do assistente, gera um TR completo
+    # e estruturado a partir das informações ditas pelo gestor, usando um TR
+    # aprovado da FSPH como modelo.
+    history = [m for m in session.messages if m.get("role") in ("user", "assistant")]
+    try:
+        tr_final = await AIChatService.synthesize_tr(history, extra_context=await load_context(db, "prompt"))
+    except AINotConfiguredError as e:
+        raise HTTPException(status_code=503, detail=str(e))
+    except AIProviderError as e:
+        raise HTTPException(status_code=502, detail=str(e))
+
+    term_id = await ChatOrchestratorService.persist_term_from_session(
+        db, session, current_user, content_override=tr_final
+    )
+    logger.info("Sessão finalizada (TR sintetizado): term_id=%s session_id=%s", term_id, session_id)
     return ChatFinalizeResponse(term_id=term_id)
 
 
