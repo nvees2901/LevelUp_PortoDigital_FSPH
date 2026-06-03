@@ -1,3 +1,4 @@
+from datetime import datetime
 from typing import Any, Literal
 
 from pydantic import BaseModel, Field, field_validator
@@ -49,7 +50,7 @@ class UserAdminOut(BaseModel):
     subunidade: str | None = None
     is_admin: bool = False
     ativo: bool = True
-    created_at: str
+    created_at: datetime
 
     model_config = {"from_attributes": True}
 
