@@ -166,7 +166,7 @@ class PDFGeneratorService:
         # --- Cabeçalho institucional ---
         story.extend(cls._build_header(styles))
         story.append(Spacer(1, 0.25 * cm))
-        story.append(HRFlowable(width="100%", thickness=1.2, color=FSPH_BLUE))
+        story.append(HRFlowable(width="100%", thickness=1.2, color=colors.black))
         story.append(Spacer(1, 0.5 * cm))
 
         # --- Título do documento ---
@@ -224,21 +224,21 @@ class PDFGeneratorService:
         return {
             "institution": ParagraphStyle(
                 "institution", parent=base["Normal"], fontName="Helvetica",
-                fontSize=9, textColor=FSPH_GRAY, alignment=TA_CENTER, spaceAfter=1,
+                fontSize=9, textColor=colors.black, alignment=TA_CENTER, spaceAfter=1,
             ),
             "institution_name": ParagraphStyle(
                 "institution_name", parent=base["Normal"], fontName="Helvetica-Bold",
-                fontSize=12.5, textColor=FSPH_BLUE, alignment=TA_CENTER,
+                fontSize=12.5, textColor=colors.black, alignment=TA_CENTER,
                 spaceBefore=3, spaceAfter=1,
             ),
             "doc_title": ParagraphStyle(
                 "doc_title", parent=base["Normal"], fontName="Helvetica-Bold",
-                fontSize=15, textColor=FSPH_BLUE, alignment=TA_CENTER,
+                fontSize=15, textColor=colors.black, alignment=TA_CENTER,
                 spaceBefore=2, spaceAfter=2, leading=18,
             ),
             "doc_subtitle": ParagraphStyle(
                 "doc_subtitle", parent=base["Normal"], fontName=body_font,
-                fontSize=11, textColor=FSPH_GRAY, alignment=TA_CENTER,
+                fontSize=11, textColor=colors.black, alignment=TA_CENTER,
                 leading=15, spaceBefore=2,
             ),
             # Corpo justificado (padrão documental)
@@ -248,12 +248,12 @@ class PDFGeneratorService:
             ),
             "h1": ParagraphStyle(
                 "h1", parent=base["Normal"], fontName="Helvetica-Bold",
-                fontSize=12.5, textColor=FSPH_BLUE, spaceBefore=14, spaceAfter=3,
+                fontSize=12.5, textColor=colors.black, spaceBefore=14, spaceAfter=3,
                 leading=15,
             ),
             "h2": ParagraphStyle(
                 "h2", parent=base["Normal"], fontName="Helvetica-Bold",
-                fontSize=11.5, textColor=FSPH_BLUE, spaceBefore=12, spaceAfter=3,
+                fontSize=11.5, textColor=colors.black, spaceBefore=12, spaceAfter=3,
                 leading=14,
             ),
             "h3": ParagraphStyle(
@@ -263,7 +263,7 @@ class PDFGeneratorService:
             ),
             "legal": ParagraphStyle(
                 "legal", parent=base["Normal"], fontName="Helvetica-Oblique",
-                fontSize=8, textColor=FSPH_GRAY, spaceAfter=4,
+                fontSize=8, textColor=colors.black, spaceAfter=4,
             ),
             "bullet": ParagraphStyle(
                 "bullet", parent=base["Normal"], fontName=body_font,
@@ -281,7 +281,7 @@ class PDFGeneratorService:
             ),
             "cell_head": ParagraphStyle(
                 "cell_head", parent=base["Normal"], fontName="Helvetica-Bold",
-                fontSize=9.5, leading=12, textColor=colors.white,
+                fontSize=9.5, leading=12, textColor=colors.black,
             ),
             "id_key": ParagraphStyle(
                 "id_key", parent=base["Normal"], fontName="Helvetica-Bold",
@@ -474,7 +474,7 @@ class PDFGeneratorService:
         col_w = [avail / ncols] * ncols
         table = Table(data, colWidths=col_w, repeatRows=1)
         table.setStyle(TableStyle([
-            ("BACKGROUND", (0, 0), (-1, 0), FSPH_BLUE),
+            ("BACKGROUND", (0, 0), (-1, 0), FSPH_ROW),
             ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, FSPH_ROW]),
             ("GRID", (0, 0), (-1, -1), 0.5, FSPH_BORDER),
             ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
@@ -538,6 +538,11 @@ class PDFGeneratorService:
         nome = (term_data.get("elaborador_nome") or "").strip()
         matricula = (term_data.get("elaborador_matricula") or "").strip()
         setor = (term_data.get("elaborador_setor") or "").strip()
+        aut_nome = (term_data.get("autoridade_nome") or "").strip()
+        aut_cargo = (term_data.get("autoridade_cargo") or "").strip()
+        aut_top = f"<b>{cls._inline(aut_nome)}</b>" if aut_nome else "<b>Autoridade competente</b>"
+        aut_role = "Autoridade competente" if aut_nome else "Cargo / Função"
+        aut_sub = cls._inline(aut_cargo) if aut_cargo else " "
 
         resp_nome = cls._inline(nome) if nome else "Responsável pela elaboração"
         if matricula:
@@ -548,11 +553,11 @@ class PDFGeneratorService:
         sig_data = [
             [Paragraph(line, styles["sign"]), Paragraph(line, styles["sign"])],
             [Paragraph(f"<b>{resp_nome}</b>", styles["sign"]),
-             Paragraph("<b>Autoridade competente</b>", styles["sign"])],
+             Paragraph(aut_top, styles["sign"])],
             [Paragraph("Responsável pela elaboração", styles["sign"]),
-             Paragraph("Cargo / Matrícula", styles["sign"])],
+             Paragraph(aut_role, styles["sign"])],
             [Paragraph(resp_sub, styles["sign"]),
-             Paragraph(" ", styles["sign"])],
+             Paragraph(aut_sub, styles["sign"])],
         ]
         sig_table = Table(sig_data, colWidths=[7.75 * cm, 7.75 * cm])
         sig_table.setStyle(TableStyle([

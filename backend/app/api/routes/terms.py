@@ -138,13 +138,18 @@ def _safe_filename(title: str, ext: str) -> str:
 
 
 @router.get("/{term_id}/export/pdf")
-async def export_term_pdf(term_id: str, db: DbDep, current_user: CurrentUser):
+async def export_term_pdf(
+    term_id: str, db: DbDep, current_user: CurrentUser,
+    autoridade: str | None = None, autoridade_cargo: str | None = None,
+):
     """Exporta um TR em PDF formatado com cabeçalho FSPH (HU-02, HU-03)."""
     term = await TermRepository.get_by_id(db, term_id)
     if not term:
         raise DocumentNotFoundError(term_id)
 
     term_dict = await _build_export_dict(db, term, current_user)
+    term_dict["autoridade_nome"] = autoridade
+    term_dict["autoridade_cargo"] = autoridade_cargo
     pdf_bytes = PDFGeneratorService.generate_term_pdf(term_dict)
     filename = _safe_filename(term.title, "pdf")
 
@@ -156,13 +161,18 @@ async def export_term_pdf(term_id: str, db: DbDep, current_user: CurrentUser):
 
 
 @router.get("/{term_id}/export/docx")
-async def export_term_docx(term_id: str, db: DbDep, current_user: CurrentUser):
+async def export_term_docx(
+    term_id: str, db: DbDep, current_user: CurrentUser,
+    autoridade: str | None = None, autoridade_cargo: str | None = None,
+):
     """Exporta o TR em DOCX (Word) editável, mesma estrutura formal do PDF."""
     term = await TermRepository.get_by_id(db, term_id)
     if not term:
         raise DocumentNotFoundError(term_id)
 
     term_dict = await _build_export_dict(db, term, current_user)
+    term_dict["autoridade_nome"] = autoridade
+    term_dict["autoridade_cargo"] = autoridade_cargo
     docx_bytes = DocxGeneratorService.generate_term_docx(term_dict)
     filename = _safe_filename(term.title, "docx")
 

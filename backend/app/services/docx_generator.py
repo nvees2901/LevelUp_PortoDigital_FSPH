@@ -18,8 +18,9 @@ from app.utils.logging import get_logger
 
 logger = get_logger(__name__)
 
-BRAND = RGBColor(0x0A, 0x2F, 0x64)
-GRAY = RGBColor(0x55, 0x55, 0x55)
+# Termo padronizado em letras pretas.
+BRAND = RGBColor(0x00, 0x00, 0x00)
+GRAY = RGBColor(0x00, 0x00, 0x00)
 FONT = "Calibri"
 
 
@@ -193,13 +194,19 @@ class DocxGeneratorService:
         setor = (term_data.get("elaborador_setor") or "").strip()
         sub = f"Matrícula: {matricula}" + (f" — {setor}" if setor else "") if matricula else "Cargo / Matrícula"
 
+        aut_nome = (term_data.get("autoridade_nome") or "").strip()
+        aut_cargo = (term_data.get("autoridade_cargo") or "").strip()
+        aut_top = aut_nome or "Autoridade competente"
+        aut_role = "Autoridade competente" if aut_nome else "Cargo / Função"
+        aut_sub = aut_cargo or ""
+
         t = doc.add_table(rows=4, cols=2)
         t.alignment = WD_TABLE_ALIGNMENT.CENTER
         data = [
             ("_" * 34, "_" * 34),
-            (nome, "Autoridade competente"),
-            ("Responsável pela elaboração", "Cargo / Matrícula"),
-            (sub, ""),
+            (nome, aut_top),
+            ("Responsável pela elaboração", aut_role),
+            (sub, aut_sub),
         ]
         for ri, (l, r) in enumerate(data):
             for ci, val in enumerate((l, r)):
