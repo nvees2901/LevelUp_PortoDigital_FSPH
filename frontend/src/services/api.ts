@@ -44,11 +44,18 @@ function getAuthHeader(): Record<string, string> {
  */
 async function parseResponseError(response: Response, fallback: string): Promise<ApiError> {
   const body = await response.json().catch(() => ({}));
-  // FastAPI uses `detail`; older paths may have sent `message`
-  const message: string =
-    typeof body.detail === 'string'
-      ? body.detail
-      : body.message || fallback;
+  let message: string;
+  if (typeof body.detail === 'string') {
+    message = body.detail;
+  } else if (Array.isArray(body.detail)) {
+    // FastAPI validation errors (422): array of {loc, msg, type}
+    message = body.detail.map((e: { loc?: string[]; msg: string }) => {
+      const field = e.loc?.slice(1).join('.') ?? '';
+      return field ? `${field}: ${e.msg}` : e.msg;
+    }).join(' | ');
+  } else {
+    message = body.message || fallback;
+  }
   return new ApiError(response.status, message, typeof body.detail === 'string' ? body.detail : undefined);
 }
 
