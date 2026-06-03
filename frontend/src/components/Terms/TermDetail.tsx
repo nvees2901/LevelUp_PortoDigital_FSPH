@@ -1,15 +1,14 @@
 import { useState, useEffect, useCallback } from 'react';
 import {
-  ArrowLeft, CheckCircle, X, Download, Bot, AlertTriangle, FileCheck,
+  ArrowLeft, CheckCircle, Download, Bot, AlertTriangle,
   ShieldCheck, ShieldAlert, ShieldX, FileText, MessageSquare,
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
-import { CHECKLIST, modalColor } from '../../constants';
+import { modalColor } from '../../constants';
 import { formatCurrency, formatDate, scoreColor } from '../../utils';
 import {
   getTerm,
   getAnalysesByTerm,
-  getChecklist,
   analyzeTerm,
   exportTermPdf,
   exportTermDocx,
@@ -17,7 +16,6 @@ import {
 import type {
   TermResponse,
   AnalysisResponse,
-  TermChecklistOut,
   TelaId,
 } from '../../types';
 
@@ -40,26 +38,26 @@ export default function TermDetail({ termId, navegar }: TermDetailProps) {
 
   const [term, setTerm] = useState<TermResponse | null>(null);
   const [analyses, setAnalyses] = useState<AnalysisResponse[]>([]);
-  const [checklistData, setChecklistData] = useState<TermChecklistOut | null>(null);
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [analyzingIA, setAnalyzingIA] = useState(false);
   const [baixando, setBaixando] = useState<'pdf' | 'docx' | null>(null);
+  const [signModal, setSignModal] = useState<'pdf' | 'docx' | null>(null);
+  const [autNome, setAutNome] = useState('');
+  const [autCargo, setAutCargo] = useState('');
 
   const loadData = useCallback(async () => {
     if (!termId) return;
     setLoading(true);
     setError(null);
     try {
-      const [termData, analysesData, checklistRaw] = await Promise.all([
+      const [termData, analysesData] = await Promise.all([
         getTerm(termId),
         getAnalysesByTerm(termId),
-        getChecklist(termId),
       ]);
       setTerm(termData);
       setAnalyses(analysesData);
-      setChecklistData(checklistRaw);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Erro ao carregar dados do processo.');
     } finally {
@@ -104,11 +102,6 @@ export default function TermDetail({ termId, navegar }: TermDetailProps) {
   if (!term) return null;
 
   // --- Derived ---
-  const ckOk = checklistData
-    ? CHECKLIST.filter(doc => checklistData[doc.id as keyof TermChecklistOut] === true).length
-    : 0;
-  const ckTotal = CHECKLIST.length;
-
   const latestAnalysis = analyses.length > 0 ? analyses[0] : null;
   const score = latestAnalysis?.compliance_score ?? null;
   const scoreColorClass = score == null ? 'text-slate-300' : scoreColor(score);
@@ -117,8 +110,10 @@ export default function TermDetail({ termId, navegar }: TermDetailProps) {
   // --- Handlers ---
   const baixar = async (kind: 'pdf' | 'docx') => {
     setBaixando(kind);
+    setSignModal(null);
     try {
-      const blob = await (kind === 'pdf' ? exportTermPdf(termId) : exportTermDocx(termId));
+      const opts = { autoridade: autNome, autoridadeCargo: autCargo };
+      const blob = await (kind === 'pdf' ? exportTermPdf(termId, opts) : exportTermDocx(termId, opts));
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       const safe = (term.title || 'documento').slice(0, 40).replace(/[^\w\s-]/g, '').trim().replace(/\s+/g, '_');
@@ -165,10 +160,10 @@ export default function TermDetail({ termId, navegar }: TermDetailProps) {
                 <span className={`badge mt-2 ${modalColor(term.category)}`}>{term.category}</span>
               </div>
               <div className="flex gap-2 shrink-0">
-                <button onClick={() => baixar('pdf')} disabled={baixando !== null} className="btn btn-primary btn-sm" title="Baixar PDF">
+                <button onClick={() => setSignModal('pdf')} disabled={baixando !== null} className="btn btn-primary btn-sm" title="Gerar PDF">
                   <Download size={14} /> {baixando === 'pdf' ? '...' : 'PDF'}
                 </button>
-                <button onClick={() => baixar('docx')} disabled={baixando !== null} className="btn btn-secondary btn-sm" title="Baixar DOCX (Word)">
+                <button onClick={() => setSignModal('docx')} disabled={baixando !== null} className="btn btn-secondary btn-sm" title="Gerar DOCX (Word)">
                   <FileText size={14} /> {baixando === 'docx' ? '...' : 'DOCX'}
                 </button>
               </div>
@@ -186,32 +181,6 @@ export default function TermDetail({ termId, navegar }: TermDetailProps) {
                   <p className="font-semibold text-slate-800">{item.v}</p>
                 </div>
               ))}
-            </div>
-
-            {/* Checklist documental */}
-            <div>
-              <div className="flex items-center justify-between mb-3">
-                <h3 className="section-title flex items-center gap-1.5">
-                  <FileCheck size={14} /> Conformidade documental — Art. 54 / Lei 14.133
-                </h3>
-                <span className={`badge ${ckOk === ckTotal ? 'badge-green' : 'badge-amber'}`}>
-                  {ckOk}/{ckTotal} docs
-                </span>
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
-                {CHECKLIST.map(doc => {
-                  const checked = checklistData ? (checklistData[doc.id as keyof TermChecklistOut] === true) : false;
-                  return (
-                    <div key={doc.id}
-                      className={`flex items-center gap-2 p-2.5 rounded-lg border text-xs font-medium ${
-                        checked ? 'bg-emerald-50 border-emerald-200 text-emerald-800' : 'bg-red-50 border-red-100 text-red-700'
-                      }`}>
-                      {checked ? <CheckCircle size={14} className="shrink-0 text-emerald-600" /> : <X size={14} className="shrink-0 text-red-500" />}
-                      {doc.label}
-                    </div>
-                  );
-                })}
-              </div>
             </div>
           </div>
         </div>
@@ -265,6 +234,48 @@ export default function TermDetail({ termId, navegar }: TermDetailProps) {
           </div>
         </div>
       </div>
+
+      {/* Modal: Autoridade competente antes de gerar o documento */}
+      {signModal && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-brand-900/40 p-4 animate-fade-in"
+          onClick={() => setSignModal(null)}
+        >
+          <div className="card shadow-card-lg w-full max-w-md p-5 animate-scale-in" onClick={e => e.stopPropagation()}>
+            <h3 className="section-title mb-1">Gerar {signModal.toUpperCase()}</h3>
+            <p className="text-sm text-slate-500 mb-4">
+              Informe a autoridade competente que assinará o documento (opcional — deixe em branco para manter o campo de assinatura vazio).
+            </p>
+            <div className="space-y-3">
+              <div>
+                <label className="label">Autoridade competente — Nome</label>
+                <input
+                  className="input"
+                  value={autNome}
+                  onChange={e => setAutNome(e.target.value)}
+                  placeholder="Ex.: Roberto Dias Nogueira"
+                  autoFocus
+                />
+              </div>
+              <div>
+                <label className="label">Cargo / Função</label>
+                <input
+                  className="input"
+                  value={autCargo}
+                  onChange={e => setAutCargo(e.target.value)}
+                  placeholder="Ex.: Diretor-Geral da FSPH"
+                />
+              </div>
+            </div>
+            <div className="flex justify-end gap-2 mt-5">
+              <button className="btn btn-ghost btn-sm" onClick={() => setSignModal(null)}>Cancelar</button>
+              <button className="btn btn-primary btn-sm" onClick={() => baixar(signModal)}>
+                <Download size={14} /> Gerar {signModal.toUpperCase()}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

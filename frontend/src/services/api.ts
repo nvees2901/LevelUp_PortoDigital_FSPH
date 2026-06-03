@@ -138,8 +138,21 @@ export async function getPendentes(): Promise<TermResponse[]> {
   return request<TermResponse[]>('/terms/pendentes');
 }
 
-export async function exportTermPdf(id: string): Promise<Blob> {
-  const url = `${API_BASE}/terms/${id}/export/pdf`;
+export interface ExportOptions {
+  autoridade?: string;
+  autoridadeCargo?: string;
+}
+
+function exportQuery(opts?: ExportOptions): string {
+  const qs = new URLSearchParams();
+  if (opts?.autoridade?.trim()) qs.set('autoridade', opts.autoridade.trim());
+  if (opts?.autoridadeCargo?.trim()) qs.set('autoridade_cargo', opts.autoridadeCargo.trim());
+  const s = qs.toString();
+  return s ? `?${s}` : '';
+}
+
+export async function exportTermPdf(id: string, opts?: ExportOptions): Promise<Blob> {
+  const url = `${API_BASE}/terms/${id}/export/pdf${exportQuery(opts)}`;
   const response = await fetch(url, { headers: getAuthHeader() });
   if (!response.ok) {
     if (response.status === 401) window.dispatchEvent(new CustomEvent('auth:401'));
@@ -148,8 +161,8 @@ export async function exportTermPdf(id: string): Promise<Blob> {
   return response.blob();
 }
 
-export async function exportTermDocx(id: string): Promise<Blob> {
-  const url = `${API_BASE}/terms/${id}/export/docx`;
+export async function exportTermDocx(id: string, opts?: ExportOptions): Promise<Blob> {
+  const url = `${API_BASE}/terms/${id}/export/docx${exportQuery(opts)}`;
   const response = await fetch(url, { headers: getAuthHeader() });
   if (!response.ok) {
     if (response.status === 401) window.dispatchEvent(new CustomEvent('auth:401'));
