@@ -196,7 +196,7 @@ class PDFGeneratorService:
 
         # --- Assinaturas ---
         story.append(Spacer(1, 1.2 * cm))
-        story.append(cls._build_signature_section(styles))
+        story.append(cls._build_signature_section(styles, term_data))
 
         doc.build(
             story,
@@ -218,8 +218,9 @@ class PDFGeneratorService:
     @staticmethod
     def _build_styles() -> dict:
         base = getSampleStyleSheet()
-        body_font = "Times-Roman"
-        bold_font = "Times-Bold"
+        # Fonte única em todo o documento (família Helvetica).
+        body_font = "Helvetica"
+        bold_font = "Helvetica-Bold"
         return {
             "institution": ParagraphStyle(
                 "institution", parent=base["Normal"], fontName="Helvetica",
@@ -507,8 +508,8 @@ class PDFGeneratorService:
         # itálico *x* / _x_
         s = re.sub(r"(?<![\*\w])\*(?!\s)(.+?)(?<!\s)\*(?![\*\w])", r"<i>\1</i>", s)
         s = re.sub(r"(?<![_\w])_(?!\s)(.+?)(?<!\s)_(?![_\w])", r"<i>\1</i>", s)
-        # código `x`
-        s = re.sub(r"`(.+?)`", r'<font face="Courier">\1</font>', s)
+        # código `x` — mantém a fonte única do documento (sem trocar para mono)
+        s = re.sub(r"`(.+?)`", r"\1", s)
         # links [t](u) -> t (u)
         s = re.sub(r"\[(.+?)\]\((.+?)\)", r"\1 (\2)", s)
         return s
@@ -531,14 +532,27 @@ class PDFGeneratorService:
     # Assinaturas
     # ------------------------------------------------------------------ #
     @classmethod
-    def _build_signature_section(cls, styles: dict):
+    def _build_signature_section(cls, styles: dict, term_data: dict | None = None):
+        term_data = term_data or {}
         line = "_" * 38
+        nome = (term_data.get("elaborador_nome") or "").strip()
+        matricula = (term_data.get("elaborador_matricula") or "").strip()
+        setor = (term_data.get("elaborador_setor") or "").strip()
+
+        resp_nome = cls._inline(nome) if nome else "Responsável pela elaboração"
+        if matricula:
+            resp_sub = f"Matrícula: {cls._inline(matricula)}" + (f" — {cls._inline(setor)}" if setor else "")
+        else:
+            resp_sub = "Cargo / Matrícula"
+
         sig_data = [
             [Paragraph(line, styles["sign"]), Paragraph(line, styles["sign"])],
+            [Paragraph(f"<b>{resp_nome}</b>", styles["sign"]),
+             Paragraph("<b>Autoridade competente</b>", styles["sign"])],
             [Paragraph("Responsável pela elaboração", styles["sign"]),
-             Paragraph("Autoridade competente", styles["sign"])],
-            [Paragraph("Cargo / Matrícula", styles["sign"]),
              Paragraph("Cargo / Matrícula", styles["sign"])],
+            [Paragraph(resp_sub, styles["sign"]),
+             Paragraph(" ", styles["sign"])],
         ]
         sig_table = Table(sig_data, colWidths=[7.75 * cm, 7.75 * cm])
         sig_table.setStyle(TableStyle([
