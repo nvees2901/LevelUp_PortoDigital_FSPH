@@ -51,6 +51,8 @@ export default function TermDetail({ termId, navegar }: TermDetailProps) {
   const [editTitle, setEditTitle] = useState('');
   const [editCategory, setEditCategory] = useState('outro');
   const [editValor, setEditValor] = useState('');
+  const [editStatus, setEditStatus] = useState('Rascunho');
+  const [editContent, setEditContent] = useState('');
   const [salvando, setSalvando] = useState(false);
 
   const loadData = useCallback(async () => {
@@ -150,6 +152,8 @@ export default function TermDetail({ termId, navegar }: TermDetailProps) {
     setEditTitle(term?.title ?? '');
     setEditCategory(term?.category ?? 'outro');
     setEditValor(term?.estimated_value != null ? String(term.estimated_value) : '');
+    setEditStatus(term?.status ?? 'Rascunho');
+    setEditContent(term?.content ?? '');
     setEditOpen(true);
   };
 
@@ -159,7 +163,9 @@ export default function TermDetail({ termId, navegar }: TermDetailProps) {
       await updateTerm(termId, {
         title: editTitle.trim() || undefined,
         category: editCategory,
+        status: editStatus,
         estimated_value: editValor.trim() === '' ? undefined : Number(editValor),
+        content: editContent,
       });
       await loadData();
       setEditOpen(false);
@@ -175,6 +181,10 @@ export default function TermDetail({ termId, navegar }: TermDetailProps) {
     { v: 'aquisicao', l: 'Aquisição' },
     { v: 'servico_tecnico', l: 'Serviço Técnico' },
     { v: 'outro', l: 'Outro' },
+  ];
+  const STATUS_OPCOES = [
+    'Rascunho', 'Aguardando DIROP', 'Aguardando DIRAF', 'Aguardando DIGER',
+    'Instrução COLIC', 'Aguardando Jurídico', 'Aprovação DIRAF/DIGER', 'Homologado',
   ];
 
   const ConfIcon = conf.Icon;
@@ -323,7 +333,7 @@ export default function TermDetail({ termId, navegar }: TermDetailProps) {
           className="fixed inset-0 z-50 flex items-center justify-center bg-brand-900/40 p-4 animate-fade-in"
           onClick={() => setEditOpen(false)}
         >
-          <div className="card shadow-card-lg w-full max-w-md p-5 animate-scale-in" onClick={e => e.stopPropagation()}>
+          <div className="card shadow-card-lg w-full max-w-2xl p-5 animate-scale-in max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
             <h3 className="section-title mb-4">Editar processo</h3>
             <div className="space-y-3">
               <div>
@@ -347,6 +357,22 @@ export default function TermDetail({ termId, navegar }: TermDetailProps) {
                   onChange={e => setEditValor(e.target.value)}
                   placeholder="Ex.: 480000.00"
                 />
+              </div>
+              <div>
+                <label className="label">Status</label>
+                <select className="input" value={editStatus} onChange={e => setEditStatus(e.target.value)}>
+                  {STATUS_OPCOES.map(s => <option key={s} value={s}>{s}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="label">Conteúdo do TR (texto do documento)</label>
+                <textarea
+                  className="input min-h-[180px] font-mono text-xs leading-relaxed"
+                  value={editContent}
+                  onChange={e => setEditContent(e.target.value)}
+                  placeholder="Texto do Termo de Referência (markdown)"
+                />
+                <p className="text-xs text-slate-400 mt-1">É este texto que aparece no PDF/DOCX gerado.</p>
               </div>
             </div>
             <div className="flex justify-end gap-2 mt-5">
