@@ -51,6 +51,39 @@ def _title_from_content(content: str, fallback: str) -> str:
     return fallback
 
 
+_CATEGORY_RULES = [
+    (("capacita", "curso", "treinamento", "formação", "qualifica"), "capacitacao"),
+    (("aquisi", "compra", "fornecimento", "material", "equipamento", "bens"), "aquisicao"),
+    (("serviç", "servic", "manuten", "reforma", "obra", "consultoria", "limpeza"), "servico_tecnico"),
+]
+
+
+def _infer_category(text: str) -> str:
+    """Infere a categoria do TR a partir de palavras-chave do objeto/conteúdo."""
+    low = text.lower()
+    for keys, cat in _CATEGORY_RULES:
+        if any(k in low for k in keys):
+            return cat
+    return "outro"
+
+
+def _extract_value(text: str):
+    """Extrai o primeiro valor monetário (R$) do TR como Decimal (ou None)."""
+    from decimal import Decimal, InvalidOperation
+
+    m = re.search(r"R\$\s*([\d][\d.\s]*,\d{2}|\d[\d.]*\d|\d)", text)
+    if not m:
+        return None
+    raw = m.group(1).replace(" ", "")
+    if "," in raw:                       # formato pt-BR: 480.000,00
+        raw = raw.replace(".", "").replace(",", ".")
+    try:
+        v = Decimal(raw)
+        return v if v > 0 else None
+    except InvalidOperation:
+        return None
+
+
 class ChatOrchestratorService:
 
     # ------------------------------------------------------------------ #
@@ -155,12 +188,16 @@ class ChatOrchestratorService:
         fallback_title = raw_title[:140] if raw_title else "Termo de Referência gerado via Chat"
         # Prefere um título limpo derivado da seção "Objeto" do TR.
         term_title = _title_from_content(tr_content, fallback_title)
+        # Categoria e valor estimado inferidos do TR (aparecem no detalhe).
+        category = _infer_category(f"{term_title}\n{tr_content}")
+        estimated_value = _extract_value(tr_content)
 
         term = await TermRepository.create(db, {
             "title": term_title,
-            "category": "outro",
+            "category": category,
             "status": "Rascunho",
             "content": tr_content,
+            "estimated_value": estimated_value,
             "created_by_id": current_user.id,
         })
         session.generated_term_id = term.id

@@ -34,61 +34,21 @@ def _get_gemini_client():
 # ------------------------------------------------------------------ #
 
 SYSTEM_PROMPTS: dict[str, str] = {
-    "gerar": """Você é um especialista em licitações e contratações públicas da FSPH (Fundação de Saúde Parreiras Horta), com profundo conhecimento da Lei nº 14.133/2021.
+    "gerar": """Você é um assistente da FSPH (Fundação de Saúde Parreiras Horta), prestativo e flexível. Sua especialidade principal são licitações e Termos de Referência sob a Lei nº 14.133/2021, mas você se adapta totalmente ao que o usuário pedir: assuma o papel, o tom, o formato, o estilo (inclusive personagens) e o assunto solicitados, mesmo fora de licitações. NUNCA recuse um pedido apenas por estar "fora da sua área" — atenda ao que foi pedido.
 
-Seu papel é auxiliar gestores a criar Termos de Referência (TR) completos, em conformidade legal, usando como base os documentos abaixo.
-
-**Estrutura obrigatória do TR (Art. 6º, XXIII):**
-a) Descrição clara e precisa do objeto
-b) Justificativa da necessidade
-c) Valor estimado com pesquisa de preços
-d) Critério de julgamento das propostas
-e) Prazo de execução ou entrega
-f) Local de entrega ou execução
-g) Modalidade de licitação ou justificativa de dispensa
-
-**Condução da conversa:**
-1. Pergunte: "Qual é o objeto da contratação?"
-2. Colete: valor estimado, prazo, local, tipo de licitação
-3. Pergunte sobre sustentabilidade e garantia contratual
-4. Gere o TR estruturado com referências à Lei 14.133/2021
-
-Cite sempre o artigo correspondente. Seja técnico, claro e objetivo.
+Quando o usuário quiser um Termo de Referência, estruture-o de forma clara cobrindo, quando fizer sentido, os elementos do Art. 6º, XXIII da Lei 14.133/2021 (objeto, justificativa, valor estimado, critério de julgamento, prazo, local, modalidade) e cite os dispositivos legais pertinentes. Use os documentos de contexto abaixo como apoio.
 
 {rag_context}""",
 
-    "analisar": """Você é um auditor jurídico especialista em conformidade com a Lei nº 14.133/2021, atuando na FSPH.
+    "analisar": """Você é um assistente da FSPH, prestativo e flexível. Sua especialidade é a conformidade de Termos de Referência com a Lei nº 14.133/2021, mas você se adapta ao que for pedido — outros formatos, tons, estilos ou assuntos. NUNCA recuse um pedido só por estar fora da sua área.
 
-Analise o Termo de Referência fornecido e identifique:
-- Inconsistências com os requisitos legais
-- Seções faltantes ou incompletas
-- Riscos jurídicos
-
-**Checklist dos 10 critérios (Art. 6º, XXIII):**
-1. Descrição do objeto
-2. Justificativa da necessidade
-3. Valor estimado
-4. Critério de julgamento
-5. Prazo de execução
-6. Local de entrega
-7. Modalidade de licitação
-8. Sustentabilidade ambiental
-9. Garantia contratual
-10. Obrigações das partes
-
-Compare o TR analisado com os TRs aprovados da FSPH abaixo como referência de qualidade.
+Por padrão, ao analisar um TR, aponte inconsistências legais, seções faltantes ou incompletas e riscos jurídicos, usando como referência os elementos do Art. 6º, XXIII e os documentos de contexto abaixo (inclusive TRs aprovados).
 
 {rag_context}""",
 
-    "consultar": """Você é um assistente especializado em Termos de Referência e licitações públicas da FSPH.
+    "consultar": """Você é um assistente da FSPH, prestativo e flexível. Sua especialidade são Termos de Referência e licitações (Lei nº 14.133/2021), mas adapte seu papel, tom, estilo e assunto ao que o usuário pedir — inclusive temas fora de licitações ou personagens/estilos diferentes. NUNCA recuse um pedido apenas por estar fora da sua área de especialidade; atenda ao que foi pedido.
 
-Responda perguntas sobre:
-- Requisitos da Lei 14.133/2021
-- Boas práticas em TRs
-- Modalidades de licitação
-- Como estruturar seções específicas
-
-Use os documentos abaixo como base para suas respostas.
+Quando não houver pedido específico de estilo ou papel, responda de forma técnica e objetiva, usando os documentos de contexto abaixo.
 
 {rag_context}""",
 }
@@ -107,20 +67,13 @@ _TR_COMPLETE_KEYWORDS: tuple[str, ...] = (
 # Prompt usado para SINTETIZAR o TR final a partir do histórico do chat.
 _SYNTH_SYSTEM = """Você é um redator técnico da FSPH (Fundação de Saúde Parreiras Horta) especializado em Termos de Referência sob a Lei nº 14.133/2021.
 
-TAREFA: a partir das informações fornecidas pelo gestor na conversa, redigir o TERMO DE REFERÊNCIA FINAL, completo e pronto, em Markdown.
+A partir das informações da conversa, redija um Termo de Referência claro e bem estruturado, em Markdown. Adapte a estrutura e o nível de detalhe ao tipo de contratação e ao que foi pedido.
 
-REGRAS OBRIGATÓRIAS:
-- Produza SOMENTE o Termo de Referência. NADA de saudações, perguntas, comentários, introduções ("aqui está", "com base no contexto") ou fechos ("espero que ajude").
-- Estruture nas seções do Art. 6º, XXIII, numeradas sequencialmente, exatamente com estes títulos:
-  "## 1. OBJETO", "## 2. JUSTIFICATIVA", "## 3. VALOR ESTIMADO",
-  "## 4. CRITÉRIO DE JULGAMENTO", "## 5. PRAZO DE EXECUÇÃO",
-  "## 6. LOCAL DE ENTREGA/EXECUÇÃO", "## 7. MODALIDADE DE LICITAÇÃO",
-  "## 8. OBRIGAÇÕES DAS PARTES". Acrescente "## 9. SUSTENTABILIDADE" e
-  "## 10. GARANTIA" quando aplicável. NUNCA escreva a letra "N" no lugar do número.
-- Não repita o título "Termo de Referência" como linha de texto; comece direto na seção 1.
-- Ao final de cada seção, cite o dispositivo correspondente da Lei nº 14.133/2021.
-- Use APENAS os dados ditos pelo gestor. Onde faltar informação, escreva [A DEFINIR] — NÃO invente valores, prazos ou nomes.
-- Linguagem formal, impessoal e objetiva (padrão de documento de governo)."""
+Orientações:
+- Use seções com títulos numerados sequencialmente ("## 1. TÍTULO", "## 2. TÍTULO", ...). Quando fizer sentido, cubra os elementos do Art. 6º, XXIII (objeto, justificativa, valor estimado, critério de julgamento, prazo, local, modalidade, obrigações) e cite os dispositivos da Lei 14.133/2021.
+- Priorize as informações fornecidas pelo gestor e complemente de forma coerente quando necessário.
+- Empregue a terminologia técnica/legal de cada seção: "objeto" e "especificação"; "justificativa da necessidade"; "valor estimado" com "pesquisa de preços"; "critério de julgamento" (ex.: "menor preço"); "prazo de execução" e "vigência"/"cronograma"; "local de execução/entrega"; "modalidade" (ex.: "pregão eletrônico"); "sustentabilidade ambiental"; "garantia contratual"; e "obrigações da contratante e da contratada".
+- Foque no conteúdo do termo (sem saudações nem perguntas) e use linguagem formal de documento de governo."""
 
 _MODELO_CACHE: str | None = None
 _MODELO_FILE = "Termo de Referência HEMO 2024.docx"
@@ -189,6 +142,91 @@ class AIChatService:
             cls._client_key = current_key
         return cls._client
 
+    # ------------------------------------------------------------------ #
+    # Cadeia de provedores com fallback automático
+    # ------------------------------------------------------------------ #
+    _clients: dict[str, Any] = {}
+
+    @staticmethod
+    def _provider_chain() -> list[dict[str, Any]]:
+        """Provedores OpenAI-compatible em ordem de tentativa: OpenRouter ->
+        Ollama -> OpenAI. Em caso de rate-limit/indisponibilidade, cai para o
+        próximo automaticamente. (Gemini usa SDK próprio, fora desta cadeia.)"""
+        chain: list[dict[str, Any]] = []
+        if settings.OPENROUTER_API_KEY.strip():
+            chain.append({"name": "OpenRouter", "api_key": settings.OPENROUTER_API_KEY.strip(),
+                          "base_url": settings.OPENROUTER_BASE_URL, "model": settings.OPENROUTER_MODEL,
+                          "openrouter": True})
+        if settings.OLLAMA_BASE_URL.strip():
+            chain.append({"name": "Ollama", "api_key": "ollama",
+                          "base_url": settings.OLLAMA_BASE_URL.strip(), "model": settings.OLLAMA_MODEL,
+                          "openrouter": False})
+        if settings.OPENAI_API_KEY.strip():
+            chain.append({"name": "OpenAI", "api_key": settings.OPENAI_API_KEY.strip(),
+                          "base_url": None, "model": settings.OPENAI_MODEL, "openrouter": False})
+        return chain
+
+    @classmethod
+    def _client_for(cls, prov: dict[str, Any]) -> Any:
+        cache_key = f"{prov['api_key']}|{prov['base_url']}"
+        cli = cls._clients.get(cache_key)
+        if cli is None:
+            from openai import AsyncOpenAI
+
+            kwargs: dict[str, Any] = {"api_key": prov["api_key"], "timeout": settings.AI_TIMEOUT_SECONDS}
+            if prov["base_url"]:
+                kwargs["base_url"] = prov["base_url"]
+            cli = AsyncOpenAI(**kwargs)
+            cls._clients[cache_key] = cli
+        return cli
+
+    @classmethod
+    async def _create_completion(cls, messages: list[dict], *, max_tokens: int, temperature: float):
+        """Cria uma completion tentando os provedores em ordem, com fallback
+        automático em rate-limit (429), indisponibilidade (5xx) ou timeout.
+        Retorna (response, provider_name)."""
+        from openai import APIConnectionError, APIStatusError, APITimeoutError, RateLimitError
+
+        chain = cls._provider_chain()
+        if not chain:
+            raise AINotConfiguredError("Nenhum provedor de IA configurado.")
+
+        last_err: Exception | None = None
+        for i, prov in enumerate(chain):
+            extra_headers = (
+                {"HTTP-Referer": "https://fsph.pe.gov.br", "X-Title": "FSPH - Sistema de Analise de TRs"}
+                if prov.get("openrouter") else {}
+            )
+            try:
+                client = cls._client_for(prov)
+                resp = await client.chat.completions.create(
+                    model=prov["model"], messages=messages,
+                    max_tokens=max_tokens, temperature=temperature,
+                    extra_headers=extra_headers,
+                )
+                if i > 0:
+                    logger.info("IA: fallback para %s bem-sucedido", prov["name"])
+                return resp, prov["name"]
+            except APIStatusError as e:
+                last_err = e
+                if getattr(e, "status_code", None) in (429, 500, 502, 503, 504):
+                    logger.warning("Provedor %s indisponível (HTTP %s); tentando próximo...",
+                                   prov["name"], e.status_code)
+                    continue
+                logger.warning("Provedor %s erro %s; tentando próximo...", prov["name"], e.status_code)
+                continue
+            except (RateLimitError, APITimeoutError, APIConnectionError) as e:
+                last_err = e
+                logger.warning("Provedor %s indisponível (%s); tentando próximo...",
+                               prov["name"], type(e).__name__)
+                continue
+            except Exception as e:  # noqa: BLE001
+                last_err = e
+                logger.warning("Provedor %s falhou (%s); tentando próximo...", prov["name"], e)
+                continue
+
+        raise AIProviderError(f"Todos os provedores de IA falharam. Último erro: {last_err}")
+
     @classmethod
     async def process_message(
         cls,
@@ -196,12 +234,14 @@ class AIChatService:
         mode: str,
         history: list[dict[str, str]],
         term_content: str | None = None,
+        extra_context: str = "",
     ) -> dict[str, Any]:
         """
         Processa uma mensagem e retorna a resposta da IA com contexto RAG.
 
         term_content: conteúdo do TR a analisar (apenas modo 'analisar').
-        É injetado no system prompt de cada chamada para garantir persistência.
+        extra_context: contexto adicional (base de conhecimento do admin),
+        injetado no system prompt mesmo com RAG desligado.
 
         Returns:
             {
@@ -213,6 +253,8 @@ class AIChatService:
 
         # Busca contexto RAG em thread separada (CPU-bound, não bloqueia event loop)
         rag_context = await asyncio.to_thread(cls._get_rag_context, message, mode)
+        if extra_context:
+            rag_context = f"{rag_context}\n\n{extra_context}".strip() if rag_context else extra_context
 
         if settings.is_gemini_mode:
             return await cls._gemini_response(message, mode, history, rag_context, term_content)
@@ -223,12 +265,13 @@ class AIChatService:
     # Síntese do TR final (a partir de todo o histórico do chat)
     # ------------------------------------------------------------------ #
     @classmethod
-    async def synthesize_tr(cls, history: list[dict[str, str]]) -> str:
+    async def synthesize_tr(cls, history: list[dict[str, str]], extra_context: str = "") -> str:
         """Gera o Termo de Referência FINAL a partir de toda a conversa.
 
         Usa um TR aprovado da FSPH como modelo de estrutura e instrui o modelo
         a produzir SOMENTE o TR (sem perguntas/conversa), extraindo os dados
-        ditos pelo gestor ao longo do chat.
+        ditos pelo gestor ao longo do chat. extra_context = base de
+        conhecimento do admin (categoria Prompt), injetada como apoio.
         """
         cls._ensure_configured()
 
@@ -238,6 +281,8 @@ class AIChatService:
             f"estrutura e linguagem, NÃO copie os dados):\n{modelo}\n"
             if modelo else ""
         )
+        if extra_context:
+            modelo_block += f"\n\n{extra_context}\n"
 
         transcript_parts = []
         for m in history:
@@ -255,29 +300,14 @@ class AIChatService:
             "Gere agora o Termo de Referência final, completo e estruturado."
         )
 
-        client = cls._get_client()
-        extra_headers = {}
-        if settings.OPENROUTER_API_KEY:
-            extra_headers = {
-                "HTTP-Referer": "https://fsph.pe.gov.br",
-                "X-Title": "FSPH - Sistema de Analise de TRs",
-            }
-
-        try:
-            response = await client.chat.completions.create(
-                model=settings.active_model,
-                messages=[
-                    {"role": "system", "content": system_content},
-                    {"role": "user", "content": user_content},
-                ],
-                max_tokens=3000,
-                temperature=0.3,
-                extra_headers=extra_headers,
-            )
-        except Exception as e:  # noqa: BLE001
-            logger.error("Erro na síntese de TR: %s", str(e), exc_info=True)
-            raise AIProviderError(f"Erro ao gerar o TR: {e}") from e
-
+        response, _ = await cls._create_completion(
+            [
+                {"role": "system", "content": system_content},
+                {"role": "user", "content": user_content},
+            ],
+            max_tokens=3000,
+            temperature=0.3,
+        )
         content = response.choices[0].message.content or ""
         from app.services.pdf_generator import clean_tr_content
         return clean_tr_content(content)
@@ -293,6 +323,7 @@ class AIChatService:
         mode: str,
         history: list[dict[str, str]],
         term_content: str | None = None,
+        extra_context: str = "",
     ) -> AsyncGenerator[str, None]:
         """
         Gera tokens de forma incremental via SSE.
@@ -304,6 +335,8 @@ class AIChatService:
         cls._ensure_configured()
 
         rag_context = await asyncio.to_thread(cls._get_rag_context, message, mode)
+        if extra_context:
+            rag_context = f"{rag_context}\n\n{extra_context}".strip() if rag_context else extra_context
 
         if settings.is_gemini_mode:
             async for chunk in cls._gemini_stream(message, mode, history, rag_context, term_content):
@@ -538,34 +571,12 @@ class AIChatService:
             {"role": "user", "content": message},
         ]
 
-        client = cls._get_client()
+        logger.info("IA request: mode=%s rag_chunks=%d msgs=%d", mode,
+                    len(rag_context.split("\n")) if rag_context else 0, len(messages))
 
-        extra_headers = {}
-        if settings.OPENROUTER_API_KEY:
-            extra_headers = {
-                "HTTP-Referer": "https://fsph.pe.gov.br",
-                "X-Title": "FSPH - Sistema de Analise de TRs",
-            }
-
-        logger.info(
-            "%s request: model=%s mode=%s rag_chunks=%d msgs=%d",
-            settings.active_provider_name,
-            settings.active_model, mode,
-            len(rag_context.split("\n")) if rag_context else 0,
-            len(messages),
+        response, provider = await cls._create_completion(
+            messages, max_tokens=2500, temperature=0.4,
         )
-
-        try:
-            response = await client.chat.completions.create(
-                model=settings.active_model,
-                messages=messages,
-                max_tokens=2500,
-                temperature=0.4,  # mais determinístico para análise jurídica
-                extra_headers=extra_headers,
-            )
-        except Exception as e:
-            logger.error("Erro %s: %s", settings.active_provider_name, str(e), exc_info=True)
-            raise AIProviderError(f"Erro ao chamar provedor de IA: {e}") from e
 
         content = response.choices[0].message.content or ""
 
@@ -574,7 +585,7 @@ class AIChatService:
 
         logger.info(
             "%s response: tokens=%s term_complete=%s",
-            settings.active_provider_name,
+            provider,
             getattr(response.usage, "total_tokens", "?"),
             term_complete,
         )

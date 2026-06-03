@@ -89,9 +89,8 @@ class RagService:
         with cls._indexing_lock:
             if cls._client is None:
                 cls.setup()
-            cls._client.get_or_create_collection(name="lei_14133")
-            cls._client.get_or_create_collection(name="termos_aprovados")
-            cls._client.get_or_create_collection(name="context_extra")
+            cls._client.get_or_create_collection(name="prompt")
+            cls._client.get_or_create_collection(name="tr")
             logger.info("✓ Coleções ChromaDB garantidas")
 
     @classmethod
@@ -147,10 +146,11 @@ class RagService:
                 continue
 
             filename = file_path.name
-            if "14133" in filename or "Lei" in filename:
-                collection = "lei_14133"
+            # TRs aprovados → categoria 'tr' (modelos); demais (Lei, etc.) → 'prompt'.
+            if "termo de refer" in filename.lower() or filename.lower().startswith("tr"):
+                collection = "tr"
             else:
-                collection = "termos_aprovados"
+                collection = "prompt"
 
             logger.info("Importando seed: %s → %s", filename, collection)
             size_bytes = file_path.stat().st_size

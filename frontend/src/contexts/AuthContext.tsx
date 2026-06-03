@@ -26,6 +26,7 @@ function deriveUsuario(userOut: UserOut): UsuarioAtual | null {
     nomeUsuarioLogado: userOut.nome,
     subunidade: userOut.subunidade ?? undefined,
     is_admin: userOut.is_admin ?? false,
+    matricula: userOut.matricula,
   };
 }
 

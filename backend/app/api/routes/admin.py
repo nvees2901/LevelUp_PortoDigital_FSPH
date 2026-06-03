@@ -152,7 +152,7 @@ def _doc_to_response(doc) -> ContextDocumentResponse:
 
 
 async def _run_indexing_task(
-    doc_id: str, storage_path: str, filename: str, collection: str = "context_extra"
+    doc_id: str, storage_path: str, filename: str, collection: str = "prompt"
 ) -> None:
     """Indexa um documento no ChromaDB e atualiza o status no banco."""
     from app.core.database import AsyncSessionLocal
@@ -179,9 +179,9 @@ async def upload_context_document(
     db: DbDep,
     current_user: AdminUser,
     collection: Annotated[
-        Literal["context_extra", "lei_14133", "termos_aprovados"],
+        Literal["prompt", "tr"],
         Form(),
-    ] = "context_extra",
+    ] = "prompt",
 ):
     """Upload de documento de contexto para a base de conhecimento da IA."""
     filename = file.filename or "documento"

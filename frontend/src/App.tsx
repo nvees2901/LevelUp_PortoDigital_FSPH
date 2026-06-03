@@ -84,12 +84,14 @@ function AppContent() {
   };
 
   return (
-    <div className="flex flex-col h-screen bg-slate-100 overflow-hidden font-ui">
+    <div className="flex flex-col h-screen bg-slate-50 overflow-hidden font-ui text-slate-700">
       <Header />
       <div className="flex flex-1 overflow-hidden">
         <Sidebar telaAtual={telaAtual} navegar={navegar} />
-        <main className="flex-1 overflow-auto p-5 bg-slate-100/60">
-          {renderConteudoPrincipal()}
+        <main className="flex-1 overflow-auto bg-slate-50">
+          <div key={telaAtual} className="animate-fade-in p-5 md:p-6">
+            {renderConteudoPrincipal()}
+          </div>
         </main>
       </div>
     </div>

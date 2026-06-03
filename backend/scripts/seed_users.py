@@ -1,11 +1,12 @@
 """
-seed_users.py — Popula usuários iniciais para desenvolvimento/staging.
+seed_users.py — Popula uma base fictícia de usuários para desenvolvimento.
 
 Uso:
     cd backend
     uv run python -m scripts.seed_users
 
 ATENÇÃO: Não executar em produção. Senha de dev é "senha123".
+Os usuários têm nome realista e matrícula numérica (login = matrícula).
 """
 import asyncio
 import sys
@@ -21,20 +22,27 @@ from app.services.auth import hash_password  # noqa: E402
 
 SENHA_DEV = "senha123"
 
+# Matrículas de testes antigos a remover (substituídas pela base numérica abaixo).
+OLD_TEST_MATRICULAS = [
+    "DEM-HEMOSE-001", "DEM-LACEN-001", "DEM-SVO-001", "DEM-ADM-001",
+    "DIROP-001", "DIRAF-001", "DIGER-001", "COLIC-001", "JUR-001",
+]
+
+# Base fictícia: nome realista + matrícula numérica.
 SEED_USERS = [
-    # Demandantes — 1 por subunidade
-    {"matricula": "DEM-HEMOSE-001", "nome": "Ana Lima (HEMOSE)",   "setor_id": "demandante", "subunidade": "HEMOSE"},
-    {"matricula": "DEM-LACEN-001",  "nome": "Bruno Melo (LACEN)",  "setor_id": "demandante", "subunidade": "LACEN"},
-    {"matricula": "DEM-SVO-001",    "nome": "Carla Nunes (SVO)",   "setor_id": "demandante", "subunidade": "SVO"},
-    {"matricula": "DEM-ADM-001",    "nome": "Diego Souza (Adm)",   "setor_id": "demandante", "subunidade": "Área Administrativa"},
+    # Área Demandante (uma por subunidade)
+    {"matricula": "1001", "nome": "Maria Eduarda Santos",   "setor_id": "demandante", "subunidade": "HEMOSE"},
+    {"matricula": "1002", "nome": "João Pedro Oliveira",    "setor_id": "demandante", "subunidade": "LACEN"},
+    {"matricula": "1003", "nome": "Ana Carolina Lima",      "setor_id": "demandante", "subunidade": "SVO"},
+    {"matricula": "1004", "nome": "Carlos Henrique Souza",  "setor_id": "demandante", "subunidade": "Área Administrativa"},
     # Demais setores
-    {"matricula": "DIROP-001", "nome": "Elisa Torres", "setor_id": "dirop",    "subunidade": None},
-    {"matricula": "DIRAF-001", "nome": "Fábio Costa",  "setor_id": "diraf",    "subunidade": None},
-    {"matricula": "DIGER-001", "nome": "Gisele Prado", "setor_id": "diger",    "subunidade": None},
-    {"matricula": "COLIC-001", "nome": "Hugo Ferraz",  "setor_id": "colic",    "subunidade": None},
-    {"matricula": "JUR-001",   "nome": "Isabela Ramos","setor_id": "juridico", "subunidade": None},
-    # Administrador do sistema — acesso ao gerenciamento de documentos de contexto da IA
-    {"matricula": "ADMIN-001", "nome": "Administrador FSPH", "setor_id": "colic", "subunidade": None, "is_admin": True},
+    {"matricula": "2001", "nome": "Fernanda Almeida Costa",  "setor_id": "dirop",    "subunidade": None},
+    {"matricula": "2002", "nome": "Ricardo Mendes Barbosa",  "setor_id": "diraf",    "subunidade": None},
+    {"matricula": "2003", "nome": "Patrícia Gomes Ferreira", "setor_id": "diger",    "subunidade": None},
+    {"matricula": "2004", "nome": "Bruno Carvalho Rocha",    "setor_id": "colic",    "subunidade": None},
+    {"matricula": "2005", "nome": "Juliana Ribeiro Martins", "setor_id": "juridico", "subunidade": None},
+    # Administrador do sistema (mantém matrícula ADMIN-001 — bootstrap depende dela)
+    {"matricula": "ADMIN-001", "nome": "Roberto Dias Nogueira", "setor_id": "colic", "subunidade": None, "is_admin": True},
 ]
 
 
@@ -44,20 +52,36 @@ async def seed() -> None:
         sys.exit(1)
 
     senha_hash = hash_password(SENHA_DEV)
-    created = 0
-    skipped = 0
+    created = updated = removed = 0
 
     async with AsyncSessionLocal() as session:
+        # Remove os usuários de teste antigos (sem TRs vinculados).
+        for matricula in OLD_TEST_MATRICULAS:
+            old = await UserRepository.get_by_matricula(session, matricula)
+            if old:
+                await session.delete(old)
+                removed += 1
+        await session.flush()
+
+        # Upsert da base fictícia.
         for data in SEED_USERS:
             existing = await UserRepository.get_by_matricula(session, data["matricula"])
             if existing:
-                skipped += 1
-                continue
-            await UserRepository.create(session, {**data, "senha_hash": senha_hash, "ativo": True})
-            created += 1
+                existing.nome = data["nome"]
+                existing.setor_id = data["setor_id"]
+                existing.subunidade = data.get("subunidade")
+                existing.is_admin = data.get("is_admin", False)
+                existing.ativo = True
+                existing.senha_hash = senha_hash
+                updated += 1
+            else:
+                await UserRepository.create(
+                    session, {**data, "senha_hash": senha_hash, "ativo": True}
+                )
+                created += 1
         await session.commit()
 
-    print(f"Seed concluído: {created} criados, {skipped} já existiam.")
+    print(f"Seed concluído: {created} criados, {updated} atualizados, {removed} antigos removidos.")
     print(f"Senha padrão de dev: {SENHA_DEV!r}")
 
 

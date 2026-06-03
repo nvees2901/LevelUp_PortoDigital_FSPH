@@ -267,14 +267,19 @@ class ComplianceService:
             if kw in normalized_text:
                 found_keywords.append(orig_kw)
 
-        # Score base: proporção de keywords encontradas
-        keyword_ratio = len(found_keywords) / max(len(criterion.keywords), 1)
-        base_score = keyword_ratio * 8  # máximo de 8 via keywords
+        # As keywords de um critério são ALTERNATIVAS (sinônimos), não uma lista
+        # obrigatória. Logo, o critério é atendido quando o texto usa a
+        # terminologia pertinente — não é exigido conter todos os sinônimos.
+        #   0 termos  -> 0  (critério não abordado)
+        #   1 termo   -> 6  (abordado parcialmente)
+        #  >=2 termos -> 8  (abordado de forma consistente)
+        n = len(found_keywords)
+        base_score = 0 if n == 0 else (6 if n == 1 else 8)
 
         # Bônus se a seção foi detectada explicitamente pelo NLP
         section_bonus = 2 if criterion.name in sections else 0
 
-        score = min(10, round(base_score + section_bonus))
+        score = min(10, base_score + section_bonus)
         return score, found_keywords
 
     @staticmethod
