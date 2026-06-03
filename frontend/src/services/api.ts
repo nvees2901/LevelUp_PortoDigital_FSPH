@@ -48,10 +48,25 @@ async function parseResponseError(response: Response, fallback: string): Promise
   if (typeof body.detail === 'string') {
     message = body.detail;
   } else if (Array.isArray(body.detail)) {
-    // FastAPI validation errors (422): array of {loc, msg, type}
-    message = body.detail.map((e: { loc?: string[]; msg: string }) => {
-      const field = e.loc?.slice(1).join('.') ?? '';
-      return field ? `${field}: ${e.msg}` : e.msg;
+    const fieldNames: Record<string, string> = {
+      matricula: 'Matrícula', nome: 'Nome', senha: 'Senha',
+      setor_id: 'Setor', subunidade: 'Subunidade', is_admin: 'Perfil',
+    };
+    const msgMap: Record<string, string> = {
+      'string_too_short': 'muito curto',
+      'string_too_long': 'muito longo',
+      'missing': 'obrigatório',
+      'value_error': 'valor inválido',
+    };
+    message = body.detail.map((e: { loc?: string[]; msg: string; type?: string }) => {
+      const rawField = e.loc?.slice(1).join('.') ?? '';
+      const field = fieldNames[rawField] ?? rawField;
+      const min = e.msg.match(/at least (\d+)/)?.[1];
+      const max = e.msg.match(/at most (\d+)/)?.[1];
+      if (min) return `${field}: mínimo de ${min} caracteres`;
+      if (max) return `${field}: máximo de ${max} caracteres`;
+      const pt = msgMap[e.type ?? ''];
+      return field ? `${field}: ${pt ?? e.msg}` : (pt ?? e.msg);
     }).join(' | ');
   } else {
     message = body.message || fallback;
