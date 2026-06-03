@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { Bot, Send, FileText, Paperclip } from 'lucide-react';
+import { Bot, Send, FileText, Paperclip, Minus } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
-import { sendChatMessage, finalizeChatSession, listChatSessions, getChatSession, uploadDocument } from '../../services/api';
+import { sendChatMessage, finalizeChatSession, listChatSessions, getChatSession, uploadDocument, deleteChatSession } from '../../services/api';
 import type { TelaId, MensagemChat, ChatMode, ChatSessionSummary } from '../../types';
 import { renderTexto } from '../../utils';
 
@@ -89,6 +89,17 @@ export default function ChatView({ navegar }: ChatViewProps) {
     setMsgs([buildWelcome()]);
     setAttachedTermId(null);
     setAttachedTermTitle(null);
+  };
+
+  const handleDeleteSession = async (e: React.MouseEvent, id: string) => {
+    e.stopPropagation();
+    try {
+      await deleteChatSession(id);
+      if (id === sessionId) novaSessao();
+      setSessions(prev => prev.filter(s => s.id !== id));
+    } catch {
+      // ignora falha silenciosamente
+    }
   };
 
   const handleModeChange = (newMode: ChatMode) => {
@@ -180,11 +191,20 @@ export default function ChatView({ navegar }: ChatViewProps) {
           ) : sessions.length === 0 ? (
             <div className="text-xs text-slate-400 text-center py-4">Nenhuma conversa anterior.</div>
           ) : sessions.map(s => (
-            <button key={s.id} onClick={() => loadSession(s.id)} disabled={loadingSession}
-              className={`w-full text-left px-3 py-2 rounded-lg text-xs transition hover:bg-slate-100 disabled:opacity-60 ${s.id === sessionId ? 'bg-blue-50 border border-blue-200 text-brand-primary font-semibold' : 'text-slate-600'}`}>
-              <p className="truncate font-medium">{s.title ?? `Sessão ${s.id.slice(0, 8)}`}</p>
-              <p className="text-slate-400 text-[10px]">{s.message_count} msg • {s.updated_at.slice(0, 10)}</p>
-            </button>
+            <div key={s.id} className="relative group">
+              <button onClick={() => loadSession(s.id)} disabled={loadingSession}
+                className={`w-full text-left px-3 py-2 pr-7 rounded-lg text-xs transition hover:bg-slate-100 disabled:opacity-60 ${s.id === sessionId ? 'bg-blue-50 border border-blue-200 text-brand-primary font-semibold' : 'text-slate-600'}`}>
+                <p className="truncate font-medium">{s.title ?? `Sessão ${s.id.slice(0, 8)}`}</p>
+                <p className="text-slate-400 text-[10px]">{s.message_count} msg • {s.updated_at.slice(0, 10)}</p>
+              </button>
+              <button
+                onClick={(e) => handleDeleteSession(e, s.id)}
+                className="absolute top-1/2 right-1.5 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity p-0.5 rounded text-slate-400 hover:text-red-500 hover:bg-red-50"
+                title="Remover conversa"
+              >
+                <Minus size={11} />
+              </button>
+            </div>
           ))}
         </div>
       </div>
