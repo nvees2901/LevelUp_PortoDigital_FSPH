@@ -29,14 +29,17 @@ export default function Header() {
             <p className="text-xs text-blue-300">Coordenação de Licitações e Contratos</p>
           </div>
         </div>
-        <div className="flex items-center gap-3">
-          <div className="text-right hidden sm:block">
-            <p className="font-bold text-sm">{usuario.nome}</p>
-            <p className="text-xs text-blue-300">
-              {usuario.subunidade ? usuario.subunidade.split('–')[0].trim() : usuario.descricao}
+        {/* Perfil do usuário logado */}
+        <div className="flex items-center gap-3 bg-white/10 border border-white/20 rounded-lg pl-3 pr-2 py-1.5">
+          <div className="text-right hidden sm:block leading-tight">
+            <p className="font-bold text-sm">{usuario.nomeUsuarioLogado}</p>
+            <p className="text-xs text-blue-200">
+              {usuario.nome}
+              {usuario.subunidade ? ` – ${usuario.subunidade.split('–')[0].trim()}` : ''}
+              {usuario.matricula ? ` · Mat. ${usuario.matricula}` : ''}
             </p>
           </div>
-          <div className="w-9 h-9 rounded-full bg-white/20 flex items-center justify-center border border-white/30">
+          <div className="w-9 h-9 rounded-full bg-white/20 flex items-center justify-center border border-white/30 shrink-0">
             {React.createElement(usuario.icon, { size: 17, className: 'text-white' })}
           </div>
         </div>

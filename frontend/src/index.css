@@ -1,3 +1,93 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+@layer base {
+  html {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+  body {
+    @apply bg-slate-50 text-slate-700;
+    font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+  }
+  h1, h2, h3, h4 {
+    @apply text-slate-800;
+  }
+  /* Foco visível consistente em toda a aplicação (acessibilidade) */
+  *:focus-visible {
+    @apply outline-none ring-2 ring-brand-400 ring-offset-1 ring-offset-white rounded-[6px];
+  }
+  ::selection {
+    @apply bg-brand-200 text-brand-900;
+  }
+  /* Scrollbar discreta */
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { @apply bg-slate-300 rounded-full border-2 border-solid border-transparent bg-clip-content; }
+  ::-webkit-scrollbar-thumb:hover { @apply bg-slate-400; }
+}
+
+@layer components {
+  /* Cartões */
+  .card {
+    @apply bg-white rounded-xl border border-slate-200 shadow-card;
+  }
+  .card-hover {
+    @apply transition-all duration-200 hover:shadow-card-md hover:-translate-y-0.5;
+  }
+
+  /* Botões */
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-lg font-semibold
+           transition-all duration-150 disabled:opacity-60 disabled:cursor-not-allowed
+           disabled:pointer-events-none active:scale-[0.98] whitespace-nowrap;
+  }
+  .btn-xs { @apply px-2.5 py-1.5 text-xs; }
+  .btn-sm { @apply px-3 py-2 text-sm; }
+  .btn-md { @apply px-4 py-2.5 text-sm; }
+  .btn-lg { @apply px-5 py-3 text-base; }
+  .btn-primary { @apply bg-brand-primary text-white shadow-sm hover:bg-brand-hover; }
+  .btn-secondary { @apply bg-white text-brand-primary border border-slate-300 hover:bg-slate-50 hover:border-slate-400; }
+  .btn-ghost { @apply text-slate-600 hover:bg-slate-100 hover:text-brand-primary; }
+  .btn-danger { @apply bg-white text-red-600 border border-red-200 hover:bg-red-50 hover:border-red-300; }
+
+  /* Formulário */
+  .label {
+    @apply block text-xs font-semibold text-slate-600 uppercase tracking-wide mb-1.5;
+  }
+  .input {
+    @apply w-full px-3.5 py-2.5 text-sm bg-white border border-slate-300 rounded-lg
+           transition-shadow placeholder:text-slate-400
+           focus:outline-none focus:ring-2 focus:ring-brand-400 focus:border-brand-400;
+  }
+  .input-icon { @apply pl-9; }
+
+  /* Badges / chips */
+  .badge {
+    @apply inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold;
+  }
+  .badge-blue { @apply bg-brand-50 text-brand-primary; }
+  .badge-green { @apply bg-emerald-50 text-emerald-700; }
+  .badge-amber { @apply bg-amber-50 text-amber-700; }
+  .badge-red { @apply bg-red-50 text-red-700; }
+  .badge-violet { @apply bg-violet-50 text-violet-700; }
+  .badge-slate { @apply bg-slate-100 text-slate-600; }
+
+  /* Títulos de seção */
+  .section-title {
+    @apply text-xs font-bold uppercase tracking-wider text-brand-primary;
+  }
+
+  /* Estados */
+  .skeleton { @apply animate-pulse bg-slate-200/70 rounded-lg; }
+  .empty-state { @apply flex flex-col items-center justify-center text-center py-12 px-6 text-slate-400; }
+
+  /* Item de navegação (sidebar) */
+  .nav-item {
+    @apply relative flex items-center gap-2.5 w-full px-3 py-2.5 rounded-lg
+           text-sm font-medium transition-colors;
+  }
+  .nav-item-idle { @apply text-slate-600 hover:bg-slate-100 hover:text-brand-primary; }
+  .nav-item-active { @apply bg-brand-primary text-white shadow-sm; }
+}

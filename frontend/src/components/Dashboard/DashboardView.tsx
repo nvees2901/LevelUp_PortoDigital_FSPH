@@ -76,10 +76,16 @@ export default function DashboardView({ navegar }: DashboardViewProps) {
 
   return (
     <div className="space-y-5 max-w-6xl mx-auto">
+      <div>
+        <p className="section-title">Painel</p>
+        <h1 className="text-xl font-black text-brand-primary">
+          Olá, {usuario.nomeUsuarioLogado?.split(' ')[0] ?? 'usuário'}
+        </h1>
+      </div>
       {/* Cards */}
       <div className="grid grid-cols-2 gap-4">
         {cards.map(c => (
-          <div key={c.label} className="bg-white rounded-xl border border-slate-200 shadow-sm p-4">
+          <div key={c.label} className="card card-hover p-4">
             <div className="flex justify-between items-start">
               <div>
                 <p className="text-xs text-slate-500 font-medium mb-1">{c.label}</p>
@@ -92,7 +98,7 @@ export default function DashboardView({ navegar }: DashboardViewProps) {
       </div>
 
       {/* Processos Recentes */}
-      <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+      <div className="card overflow-hidden">
         <div className="p-4 border-b border-slate-100 flex items-center justify-between">
           <h3 className="font-bold text-brand-primary text-sm">Processos Recentes</h3>
           <button onClick={() => navegar('lista')} className="text-xs text-brand-primary hover:underline font-medium">Ver todos →</button>

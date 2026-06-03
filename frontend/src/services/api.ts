@@ -148,6 +148,16 @@ export async function exportTermPdf(id: string): Promise<Blob> {
   return response.blob();
 }
 
+export async function exportTermDocx(id: string): Promise<Blob> {
+  const url = `${API_BASE}/terms/${id}/export/docx`;
+  const response = await fetch(url, { headers: getAuthHeader() });
+  if (!response.ok) {
+    if (response.status === 401) window.dispatchEvent(new CustomEvent('auth:401'));
+    throw await parseResponseError(response, 'Erro ao exportar DOCX');
+  }
+  return response.blob();
+}
+
 export async function getChecklist(termId: string): Promise<TermChecklistOut> {
   return request<TermChecklistOut>(`/terms/${termId}/checklist`);
 }
@@ -285,7 +295,7 @@ export async function listContextDocuments(): Promise<ContextDocumentList> {
 
 export async function uploadContextDocument(
   file: File,
-  collection: 'context_extra' | 'lei_14133' | 'termos_aprovados' = 'context_extra',
+  collection: 'prompt' | 'tr' = 'prompt',
 ): Promise<ContextDocument> {
   const formData = new FormData();
   formData.append('file', file);
@@ -335,7 +345,7 @@ export async function downloadContextDocument(id: string, filename: string): Pro
 export async function createTextContextDocument(
   title: string,
   content: string,
-  collection: 'context_extra' | 'lei_14133' | 'termos_aprovados' = 'context_extra',
+  collection: 'prompt' | 'tr' = 'prompt',
 ): Promise<ContextDocument> {
   return request<ContextDocument>('/admin/context-documents/text', {
     method: 'POST',
