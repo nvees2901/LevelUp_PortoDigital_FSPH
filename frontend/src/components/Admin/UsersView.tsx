@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { UserPlus, Pencil, UserX, UserCheck, X, Loader2 } from 'lucide-react';
-import { COLORS, SETORES, SUBUNIDADES } from '../../constants';
+import { SETORES, SUBUNIDADES } from '../../constants';
 import { listUsers, createUser, updateUser, deleteUser } from '../../services/api';
 import type { UserAdminOut, UserCreate, UserUpdate, SetorId, TelaId } from '../../types';
 
@@ -112,7 +112,7 @@ function UserModal({ user, onClose, onSaved }: ModalProps) {
               value={form.matricula}
               onChange={(e) => set('matricula', e.target.value)}
               placeholder="Ex: COLIC-002"
-              className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#0a2f64] disabled:bg-slate-50 disabled:text-slate-400"
+              className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-primary disabled:bg-slate-50 disabled:text-slate-400"
             />
           </div>
 
@@ -126,7 +126,7 @@ function UserModal({ user, onClose, onSaved }: ModalProps) {
               value={form.nome}
               onChange={(e) => set('nome', e.target.value)}
               placeholder="Nome do funcionário"
-              className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#0a2f64]"
+              className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-primary"
             />
           </div>
 
@@ -140,7 +140,7 @@ function UserModal({ user, onClose, onSaved }: ModalProps) {
               value={form.senha}
               onChange={(e) => set('senha', e.target.value)}
               placeholder={isEditing ? '••••••••' : 'Mínimo 6 caracteres'}
-              className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#0a2f64]"
+              className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-primary"
             />
           </div>
 
@@ -151,7 +151,7 @@ function UserModal({ user, onClose, onSaved }: ModalProps) {
             <select
               value={form.setor_id}
               onChange={(e) => set('setor_id', e.target.value as SetorId)}
-              className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#0a2f64]"
+              className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-primary"
             >
               {SETORES.map((s) => (
                 <option key={s.id} value={s.id}>{s.nome}</option>
@@ -167,7 +167,7 @@ function UserModal({ user, onClose, onSaved }: ModalProps) {
               <select
                 value={form.subunidade}
                 onChange={(e) => set('subunidade', e.target.value)}
-                className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#0a2f64]"
+                className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-primary"
               >
                 <option value="">Selecione...</option>
                 {SUBUNIDADES.map((s) => (
@@ -211,8 +211,7 @@ function UserModal({ user, onClose, onSaved }: ModalProps) {
             <button
               type="submit"
               disabled={loading}
-              style={{ backgroundColor: COLORS.primary }}
-              className="flex-1 px-4 py-2 text-white rounded-lg text-sm font-semibold disabled:opacity-60 flex items-center justify-center gap-2"
+              className="bg-brand-primary flex-1 px-4 py-2 text-white rounded-lg text-sm font-semibold disabled:opacity-60 flex items-center justify-center gap-2"
             >
               {loading && <Loader2 size={14} className="animate-spin" />}
               {isEditing ? 'Salvar Alterações' : 'Criar Usuário'}
@@ -265,8 +264,7 @@ export default function UsersView({ navegar: _navegar }: UsersViewProps) {
         </div>
         <button
           onClick={() => { setSelected(null); setModal('create'); }}
-          style={{ backgroundColor: COLORS.primary }}
-          className="flex items-center gap-2 px-4 py-2 text-white rounded-lg text-sm font-semibold hover:bg-[#134084] shadow-sm"
+          className="bg-brand-primary hover:bg-brand-hover flex items-center gap-2 px-4 py-2 text-white rounded-lg text-sm font-semibold shadow-sm"
         >
           <UserPlus size={16} />
           Novo Usuário
