@@ -142,6 +142,91 @@ class AIChatService:
             cls._client_key = current_key
         return cls._client
 
+    # ------------------------------------------------------------------ #
+    # Cadeia de provedores com fallback automático
+    # ------------------------------------------------------------------ #
+    _clients: dict[str, Any] = {}
+
+    @staticmethod
+    def _provider_chain() -> list[dict[str, Any]]:
+        """Provedores OpenAI-compatible em ordem de tentativa: OpenRouter ->
+        Ollama -> OpenAI. Em caso de rate-limit/indisponibilidade, cai para o
+        próximo automaticamente. (Gemini usa SDK próprio, fora desta cadeia.)"""
+        chain: list[dict[str, Any]] = []
+        if settings.OPENROUTER_API_KEY.strip():
+            chain.append({"name": "OpenRouter", "api_key": settings.OPENROUTER_API_KEY.strip(),
+                          "base_url": settings.OPENROUTER_BASE_URL, "model": settings.OPENROUTER_MODEL,
+                          "openrouter": True})
+        if settings.OLLAMA_BASE_URL.strip():
+            chain.append({"name": "Ollama", "api_key": "ollama",
+                          "base_url": settings.OLLAMA_BASE_URL.strip(), "model": settings.OLLAMA_MODEL,
+                          "openrouter": False})
+        if settings.OPENAI_API_KEY.strip():
+            chain.append({"name": "OpenAI", "api_key": settings.OPENAI_API_KEY.strip(),
+                          "base_url": None, "model": settings.OPENAI_MODEL, "openrouter": False})
+        return chain
+
+    @classmethod
+    def _client_for(cls, prov: dict[str, Any]) -> Any:
+        cache_key = f"{prov['api_key']}|{prov['base_url']}"
+        cli = cls._clients.get(cache_key)
+        if cli is None:
+            from openai import AsyncOpenAI
+
+            kwargs: dict[str, Any] = {"api_key": prov["api_key"], "timeout": settings.AI_TIMEOUT_SECONDS}
+            if prov["base_url"]:
+                kwargs["base_url"] = prov["base_url"]
+            cli = AsyncOpenAI(**kwargs)
+            cls._clients[cache_key] = cli
+        return cli
+
+    @classmethod
+    async def _create_completion(cls, messages: list[dict], *, max_tokens: int, temperature: float):
+        """Cria uma completion tentando os provedores em ordem, com fallback
+        automático em rate-limit (429), indisponibilidade (5xx) ou timeout.
+        Retorna (response, provider_name)."""
+        from openai import APIConnectionError, APIStatusError, APITimeoutError, RateLimitError
+
+        chain = cls._provider_chain()
+        if not chain:
+            raise AINotConfiguredError("Nenhum provedor de IA configurado.")
+
+        last_err: Exception | None = None
+        for i, prov in enumerate(chain):
+            extra_headers = (
+                {"HTTP-Referer": "https://fsph.pe.gov.br", "X-Title": "FSPH - Sistema de Analise de TRs"}
+                if prov.get("openrouter") else {}
+            )
+            try:
+                client = cls._client_for(prov)
+                resp = await client.chat.completions.create(
+                    model=prov["model"], messages=messages,
+                    max_tokens=max_tokens, temperature=temperature,
+                    extra_headers=extra_headers,
+                )
+                if i > 0:
+                    logger.info("IA: fallback para %s bem-sucedido", prov["name"])
+                return resp, prov["name"]
+            except APIStatusError as e:
+                last_err = e
+                if getattr(e, "status_code", None) in (429, 500, 502, 503, 504):
+                    logger.warning("Provedor %s indisponível (HTTP %s); tentando próximo...",
+                                   prov["name"], e.status_code)
+                    continue
+                logger.warning("Provedor %s erro %s; tentando próximo...", prov["name"], e.status_code)
+                continue
+            except (RateLimitError, APITimeoutError, APIConnectionError) as e:
+                last_err = e
+                logger.warning("Provedor %s indisponível (%s); tentando próximo...",
+                               prov["name"], type(e).__name__)
+                continue
+            except Exception as e:  # noqa: BLE001
+                last_err = e
+                logger.warning("Provedor %s falhou (%s); tentando próximo...", prov["name"], e)
+                continue
+
+        raise AIProviderError(f"Todos os provedores de IA falharam. Último erro: {last_err}")
+
     @classmethod
     async def process_message(
         cls,
@@ -208,29 +293,14 @@ class AIChatService:
             "Gere agora o Termo de Referência final, completo e estruturado."
         )
 
-        client = cls._get_client()
-        extra_headers = {}
-        if settings.OPENROUTER_API_KEY:
-            extra_headers = {
-                "HTTP-Referer": "https://fsph.pe.gov.br",
-                "X-Title": "FSPH - Sistema de Analise de TRs",
-            }
-
-        try:
-            response = await client.chat.completions.create(
-                model=settings.active_model,
-                messages=[
-                    {"role": "system", "content": system_content},
-                    {"role": "user", "content": user_content},
-                ],
-                max_tokens=3000,
-                temperature=0.3,
-                extra_headers=extra_headers,
-            )
-        except Exception as e:  # noqa: BLE001
-            logger.error("Erro na síntese de TR: %s", str(e), exc_info=True)
-            raise AIProviderError(f"Erro ao gerar o TR: {e}") from e
-
+        response, _ = await cls._create_completion(
+            [
+                {"role": "system", "content": system_content},
+                {"role": "user", "content": user_content},
+            ],
+            max_tokens=3000,
+            temperature=0.3,
+        )
         content = response.choices[0].message.content or ""
         from app.services.pdf_generator import clean_tr_content
         return clean_tr_content(content)
@@ -491,34 +561,12 @@ class AIChatService:
             {"role": "user", "content": message},
         ]
 
-        client = cls._get_client()
+        logger.info("IA request: mode=%s rag_chunks=%d msgs=%d", mode,
+                    len(rag_context.split("\n")) if rag_context else 0, len(messages))
 
-        extra_headers = {}
-        if settings.OPENROUTER_API_KEY:
-            extra_headers = {
-                "HTTP-Referer": "https://fsph.pe.gov.br",
-                "X-Title": "FSPH - Sistema de Analise de TRs",
-            }
-
-        logger.info(
-            "%s request: model=%s mode=%s rag_chunks=%d msgs=%d",
-            settings.active_provider_name,
-            settings.active_model, mode,
-            len(rag_context.split("\n")) if rag_context else 0,
-            len(messages),
+        response, provider = await cls._create_completion(
+            messages, max_tokens=2500, temperature=0.4,
         )
-
-        try:
-            response = await client.chat.completions.create(
-                model=settings.active_model,
-                messages=messages,
-                max_tokens=2500,
-                temperature=0.4,  # mais determinístico para análise jurídica
-                extra_headers=extra_headers,
-            )
-        except Exception as e:
-            logger.error("Erro %s: %s", settings.active_provider_name, str(e), exc_info=True)
-            raise AIProviderError(f"Erro ao chamar provedor de IA: {e}") from e
 
         content = response.choices[0].message.content or ""
 
@@ -527,7 +575,7 @@ class AIChatService:
 
         logger.info(
             "%s response: tokens=%s term_complete=%s",
-            settings.active_provider_name,
+            provider,
             getattr(response.usage, "total_tokens", "?"),
             term_complete,
         )
