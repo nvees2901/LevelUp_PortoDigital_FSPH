@@ -25,7 +25,7 @@ jobs:
       - name: Build
         working-directory: frontend
         env:
-          VITE_API_URL: https://fsph-backend-lagyelyfmq-uc.a.run.app
+          VITE_API_URL: https://fsph-backend-lagyelyfmq-uc.a.run.app/api/v1
         run: |
           npm run build
 
