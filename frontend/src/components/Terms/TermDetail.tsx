@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import {
   ArrowLeft, CheckCircle, Download, Bot, AlertTriangle,
-  ShieldCheck, ShieldAlert, ShieldX, FileText, MessageSquare,
+  ShieldCheck, ShieldAlert, ShieldX, FileText, MessageSquare, Pencil,
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { modalColor } from '../../constants';
@@ -12,6 +12,7 @@ import {
   analyzeTerm,
   exportTermPdf,
   exportTermDocx,
+  updateTerm,
 } from '../../services/api';
 import type {
   TermResponse,
@@ -46,6 +47,11 @@ export default function TermDetail({ termId, navegar }: TermDetailProps) {
   const [signModal, setSignModal] = useState<'pdf' | 'docx' | null>(null);
   const [autNome, setAutNome] = useState('');
   const [autCargo, setAutCargo] = useState('');
+  const [editOpen, setEditOpen] = useState(false);
+  const [editTitle, setEditTitle] = useState('');
+  const [editCategory, setEditCategory] = useState('outro');
+  const [editValor, setEditValor] = useState('');
+  const [salvando, setSalvando] = useState(false);
 
   const loadData = useCallback(async () => {
     if (!termId) return;
@@ -140,6 +146,37 @@ export default function TermDetail({ termId, navegar }: TermDetailProps) {
     }
   };
 
+  const abrirEdicao = () => {
+    setEditTitle(term?.title ?? '');
+    setEditCategory(term?.category ?? 'outro');
+    setEditValor(term?.estimated_value != null ? String(term.estimated_value) : '');
+    setEditOpen(true);
+  };
+
+  const salvarEdicao = async () => {
+    setSalvando(true);
+    try {
+      await updateTerm(termId, {
+        title: editTitle.trim() || undefined,
+        category: editCategory,
+        estimated_value: editValor.trim() === '' ? undefined : Number(editValor),
+      });
+      await loadData();
+      setEditOpen(false);
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Erro ao salvar alterações');
+    } finally {
+      setSalvando(false);
+    }
+  };
+
+  const CATEGORIAS: { v: string; l: string }[] = [
+    { v: 'capacitacao', l: 'Capacitação' },
+    { v: 'aquisicao', l: 'Aquisição' },
+    { v: 'servico_tecnico', l: 'Serviço Técnico' },
+    { v: 'outro', l: 'Outro' },
+  ];
+
   const ConfIcon = conf.Icon;
 
   return (
@@ -160,6 +197,9 @@ export default function TermDetail({ termId, navegar }: TermDetailProps) {
                 <span className={`badge mt-2 ${modalColor(term.category)}`}>{term.category}</span>
               </div>
               <div className="flex gap-2 shrink-0">
+                <button onClick={abrirEdicao} className="btn btn-ghost btn-sm" title="Editar dados do processo">
+                  <Pencil size={14} /> Editar
+                </button>
                 <button onClick={() => setSignModal('pdf')} disabled={baixando !== null} className="btn btn-primary btn-sm" title="Gerar PDF">
                   <Download size={14} /> {baixando === 'pdf' ? '...' : 'PDF'}
                 </button>
@@ -271,6 +311,48 @@ export default function TermDetail({ termId, navegar }: TermDetailProps) {
               <button className="btn btn-ghost btn-sm" onClick={() => setSignModal(null)}>Cancelar</button>
               <button className="btn btn-primary btn-sm" onClick={() => baixar(signModal)}>
                 <Download size={14} /> Gerar {signModal.toUpperCase()}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: editar dados do processo */}
+      {editOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-brand-900/40 p-4 animate-fade-in"
+          onClick={() => setEditOpen(false)}
+        >
+          <div className="card shadow-card-lg w-full max-w-md p-5 animate-scale-in" onClick={e => e.stopPropagation()}>
+            <h3 className="section-title mb-4">Editar processo</h3>
+            <div className="space-y-3">
+              <div>
+                <label className="label">Objeto / Título</label>
+                <input className="input" value={editTitle} onChange={e => setEditTitle(e.target.value)} autoFocus />
+              </div>
+              <div>
+                <label className="label">Categoria</label>
+                <select className="input" value={editCategory} onChange={e => setEditCategory(e.target.value)}>
+                  {CATEGORIAS.map(c => <option key={c.v} value={c.v}>{c.l}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="label">Valor estimado (R$)</label>
+                <input
+                  className="input"
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={editValor}
+                  onChange={e => setEditValor(e.target.value)}
+                  placeholder="Ex.: 480000.00"
+                />
+              </div>
+            </div>
+            <div className="flex justify-end gap-2 mt-5">
+              <button className="btn btn-ghost btn-sm" onClick={() => setEditOpen(false)}>Cancelar</button>
+              <button className="btn btn-primary btn-sm" onClick={salvarEdicao} disabled={salvando}>
+                {salvando ? 'Salvando...' : 'Salvar'}
               </button>
             </div>
           </div>
