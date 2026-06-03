@@ -234,12 +234,14 @@ class AIChatService:
         mode: str,
         history: list[dict[str, str]],
         term_content: str | None = None,
+        extra_context: str = "",
     ) -> dict[str, Any]:
         """
         Processa uma mensagem e retorna a resposta da IA com contexto RAG.
 
         term_content: conteúdo do TR a analisar (apenas modo 'analisar').
-        É injetado no system prompt de cada chamada para garantir persistência.
+        extra_context: contexto adicional (base de conhecimento do admin),
+        injetado no system prompt mesmo com RAG desligado.
 
         Returns:
             {
@@ -251,6 +253,8 @@ class AIChatService:
 
         # Busca contexto RAG em thread separada (CPU-bound, não bloqueia event loop)
         rag_context = await asyncio.to_thread(cls._get_rag_context, message, mode)
+        if extra_context:
+            rag_context = f"{rag_context}\n\n{extra_context}".strip() if rag_context else extra_context
 
         if settings.is_gemini_mode:
             return await cls._gemini_response(message, mode, history, rag_context, term_content)
@@ -261,12 +265,13 @@ class AIChatService:
     # Síntese do TR final (a partir de todo o histórico do chat)
     # ------------------------------------------------------------------ #
     @classmethod
-    async def synthesize_tr(cls, history: list[dict[str, str]]) -> str:
+    async def synthesize_tr(cls, history: list[dict[str, str]], extra_context: str = "") -> str:
         """Gera o Termo de Referência FINAL a partir de toda a conversa.
 
         Usa um TR aprovado da FSPH como modelo de estrutura e instrui o modelo
         a produzir SOMENTE o TR (sem perguntas/conversa), extraindo os dados
-        ditos pelo gestor ao longo do chat.
+        ditos pelo gestor ao longo do chat. extra_context = base de
+        conhecimento do admin (categoria Prompt), injetada como apoio.
         """
         cls._ensure_configured()
 
@@ -276,6 +281,8 @@ class AIChatService:
             f"estrutura e linguagem, NÃO copie os dados):\n{modelo}\n"
             if modelo else ""
         )
+        if extra_context:
+            modelo_block += f"\n\n{extra_context}\n"
 
         transcript_parts = []
         for m in history:
@@ -316,6 +323,7 @@ class AIChatService:
         mode: str,
         history: list[dict[str, str]],
         term_content: str | None = None,
+        extra_context: str = "",
     ) -> AsyncGenerator[str, None]:
         """
         Gera tokens de forma incremental via SSE.
@@ -327,6 +335,8 @@ class AIChatService:
         cls._ensure_configured()
 
         rag_context = await asyncio.to_thread(cls._get_rag_context, message, mode)
+        if extra_context:
+            rag_context = f"{rag_context}\n\n{extra_context}".strip() if rag_context else extra_context
 
         if settings.is_gemini_mode:
             async for chunk in cls._gemini_stream(message, mode, history, rag_context, term_content):
