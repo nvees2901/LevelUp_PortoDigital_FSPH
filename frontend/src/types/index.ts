@@ -192,17 +192,27 @@ export interface ContextDocument {
   original_filename: string;
   mime_type: string;
   size_bytes: number;
-  uploaded_by_id: string;
+  uploaded_by_id: string | null;
   uploaded_at: string;
   indexed_at: string | null;
   status: 'pending' | 'indexed' | 'failed';
   chunks_count: number | null;
   error_message: string | null;
+  is_active: boolean;
+  collection: string;
+  is_seed: boolean;
 }
 
 export interface ContextDocumentList {
   items: ContextDocument[];
   total: number;
+}
+
+export interface ContextDocumentPreviewResponse {
+  type: 'pdf' | 'text';
+  text?: string;
+  truncated?: boolean;
+  download_url?: string;
 }
 
 export interface KnowledgeBaseCollection {

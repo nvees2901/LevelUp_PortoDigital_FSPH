@@ -114,6 +114,17 @@ class ChatSessionNotFoundError(FSPHBaseException):
         )
 
 
+class NoAssistantContentError(FSPHBaseException):
+    """Levantado quando uma sessão não contém conteúdo gerado pelo assistente."""
+
+    def __init__(self) -> None:
+        super().__init__(
+            message="A sessão não contém conteúdo gerado pelo assistente.",
+            error_code="NO_ASSISTANT_CONTENT",
+            http_status=status.HTTP_422_UNPROCESSABLE_ENTITY,
+        )
+
+
 class InvalidCredentialsError(FSPHBaseException):
     """Levantado em falha de autenticação (matrícula ou senha inválidos)."""
 

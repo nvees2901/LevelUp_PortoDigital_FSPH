@@ -41,17 +41,12 @@ def _extract_pdf_text(file_path: Path) -> str:
 
 logger = get_logger(__name__)
 
-CHUNK_SIZE = 1500      # ~375 tokens
-CHUNK_OVERLAP = 200    # overlap para não perder contexto nas bordas
-
 
 class RagService:
     """Serviço singleton de RAG. Conecta ao ChromaDB server via HTTP."""
 
     _client: "chromadb.ClientAPI | None" = None
-    _indexed: bool = False
-    _setup_done: bool = False
-    _indexing_lock = threading.Lock()  # evita indexação simultânea
+    _indexing_lock = threading.Lock()  # evita indexação simultânea dentro do mesmo processo
 
     # ------------------------------------------------------------------ #
     # Setup
@@ -65,7 +60,7 @@ class RagService:
         """
         if not settings.RAG_ENABLED:
             return
-        if cls._setup_done:
+        if cls._client is not None:
             return
 
         import chromadb
@@ -83,103 +78,142 @@ class RagService:
 
         # Verifica conexão
         cls._client.heartbeat()
-        cls._setup_done = True
         logger.info("✓ Conectado ao ChromaDB server")
 
     @classmethod
     def index_documents(cls, docs_path: str | None = None) -> None:
         """
-        Indexa todos os documentos da pasta /docs no ChromaDB.
-        Se os documentos já estiverem indexados, não re-indexa.
-        Thread-safe via lock.
+        Garante que as três coleções ChromaDB existem.
+        A indexação dos seeds agora é responsabilidade de import_seed_documents().
         """
-        if cls._indexed:
-            return
-
         with cls._indexing_lock:
-            # Double-check após adquirir o lock
-            if cls._indexed:
-                return
-
             if cls._client is None:
                 cls.setup()
+            cls._client.get_or_create_collection(name="lei_14133")
+            cls._client.get_or_create_collection(name="termos_aprovados")
+            cls._client.get_or_create_collection(name="context_extra")
+            logger.info("✓ Coleções ChromaDB garantidas")
 
-            docs_dir = Path(docs_path or settings.DOCS_PATH)
-            if not docs_dir.exists():
-                logger.warning("Pasta /docs não encontrada: %s", docs_dir.resolve())
-                return
+    @classmethod
+    async def import_seed_documents(cls, db) -> None:
+        """
+        Importa os arquivos de documents/ para a tabela context_documents e indexa no ChromaDB.
 
-            # Cria ou carrega coleções
-            lei_collection = cls._client.get_or_create_collection(
-                name="lei_14133",
-                metadata={"description": "Lei 14.133/2021 — Nova Lei de Licitações"},
-            )
-            tr_collection = cls._client.get_or_create_collection(
-                name="termos_aprovados",
-                metadata={"description": "TRs pré-aprovados da FSPH"},
-            )
-            extra_collection = cls._client.get_or_create_collection(
-                name="context_extra",
-                metadata={"description": "Documentos de contexto adicionais — carregados pelo admin"},
-            )
+        Idempotente via marcador JSON em {CONTEXT_DOCS_DIR}/.seeds_imported.
+        Semântica de coleção por nome de arquivo: "14133" ou "Lei" → lei_14133, resto → termos_aprovados.
+        O limite MAX_FILE_SIZE_MB é ignorado para seeds (conteúdo institucional confiável).
+        """
+        import json
 
-            # Verifica se já foi indexado
-            if lei_collection.count() > 0 and tr_collection.count() > 0:
-                logger.info(
-                    "✓ ChromaDB já indexado: %d chunks lei | %d chunks TRs",
-                    lei_collection.count(), tr_collection.count(),
+        from app.models.context_document import ContextDocument
+        from app.repositories.context_document import ContextDocumentRepository
+
+        if not settings.RAG_ENABLED:
+            logger.info("RAG desabilitado — seeds não importados")
+            return
+
+        if cls._client is None:
+            await asyncio.to_thread(cls.setup)
+
+        docs_dir = Path(settings.DOCS_PATH)
+        if not docs_dir.exists():
+            logger.warning("Pasta de seeds não encontrada: %s", docs_dir.resolve())
+            return
+
+        context_dir = Path(settings.CONTEXT_DOCS_DIR)
+        context_dir.mkdir(parents=True, exist_ok=True)
+        marker_path = context_dir / ".seeds_imported"
+
+        imported: list[str] = []
+        if marker_path.exists():
+            try:
+                imported = json.loads(marker_path.read_text())
+            except Exception:
+                imported = []
+
+        # Normaliza o conjunto de arquivos já processados (inclui entradas "FAILED:nome")
+        # para evitar que um arquivo que crashou o processo seja re-tentado no próximo boot.
+        processed_filenames: set[str] = {
+            e[len("FAILED:"):] if e.startswith("FAILED:") else e
+            for e in imported
+        }
+
+        for file_path in sorted(docs_dir.iterdir()):
+            if file_path.name.startswith(".") or file_path.name == ".gitkeep":
+                continue
+            if file_path.suffix.lower() not in {".pdf", ".docx", ".doc"}:
+                continue
+            if file_path.name in processed_filenames:
+                continue
+
+            filename = file_path.name
+            if "14133" in filename or "Lei" in filename:
+                collection = "lei_14133"
+            else:
+                collection = "termos_aprovados"
+
+            logger.info("Importando seed: %s → %s", filename, collection)
+            size_bytes = file_path.stat().st_size
+            mime = "application/pdf" if file_path.suffix.lower() == ".pdf" else "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+
+            # Reusar linha existente se o container crashou antes do commit do marker
+            doc = await ContextDocumentRepository.get_seed_by_filename(db, filename)
+            if doc is None:
+                doc = await ContextDocumentRepository.create(db, {
+                    "filename": filename,
+                    "original_filename": filename,
+                    "mime_type": mime,
+                    "size_bytes": size_bytes,
+                    "storage_path": str(file_path),
+                    "uploaded_by_id": None,
+                    "collection": collection,
+                    "is_seed": True,
+                    "status": "pending",
+                })
+            else:
+                await ContextDocumentRepository.mark_pending(db, doc)
+            await db.commit()
+
+            try:
+                # Indexar sem limite de tamanho
+                target_collection = await asyncio.to_thread(
+                    lambda c=collection: cls._client.get_or_create_collection(name=c)
                 )
-                cls._indexed = True
-                return
 
-            # Indexa os documentos
-            lei_indexed = 0
-            tr_indexed = 0
-
-            MAX_FILE_SIZE = 50 * 1024 * 1024  # 50MB
-
-            for file_path in docs_dir.iterdir():
-                if file_path.name == ".gitkeep":
-                    continue
-
-                filename = file_path.name
-                file_size = file_path.stat().st_size
-
-                if file_size > MAX_FILE_SIZE:
-                    logger.warning(
-                        "Pulando %s (%.1f MB) — excede limite de %d MB para indexação",
-                        filename, file_size / 1024 / 1024, MAX_FILE_SIZE // 1024 // 1024,
+                if file_path.suffix.lower() == ".pdf":
+                    text = await asyncio.to_thread(_extract_pdf_text, file_path)
+                else:
+                    file_bytes = await asyncio.to_thread(file_path.read_bytes)
+                    from app.services.document import DocumentService
+                    text = await asyncio.to_thread(
+                        DocumentService.extract_text_sync, file_bytes, filename
                     )
-                    continue
+                    del file_bytes  # libera antes do pico de memória do modelo ONNX
 
-                logger.info("Indexando: %s", filename)
+                chunks = cls._chunk_text(text, filename)
+                del text  # release before ONNX model loads
+                if chunks:
+                    import gc; gc.collect()
+                    await asyncio.to_thread(cls._remove_chunks_from_collection, target_collection, filename)
+                    await asyncio.to_thread(cls._add_to_collection, target_collection, chunks)
 
-                try:
-                    if file_path.suffix.lower() == ".pdf":
-                        text = _extract_pdf_text(file_path)
-                    else:
-                        from app.services.document import DocumentService
-                        text = DocumentService.extract_text_sync(file_path.read_bytes(), filename)
+                await ContextDocumentRepository.mark_indexed(db, doc, len(chunks))
+                await db.commit()
+                logger.info("  ✓ Seed indexado: %s (%d chunks)", filename, len(chunks))
 
-                    if "14133" in filename or "Lei" in filename:
-                        chunks = cls._chunk_text(text, filename)
-                        cls._add_to_collection(lei_collection, chunks)
-                        lei_indexed += len(chunks)
-                        logger.info("  ✓ Lei indexada: %d chunks", len(chunks))
-                    else:
-                        chunks = cls._chunk_text(text, filename)
-                        cls._add_to_collection(tr_collection, chunks)
-                        tr_indexed += len(chunks)
-                        logger.info("  ✓ TR indexado: %d chunks", len(chunks))
+                # Grava marcador APÓS commit bem-sucedido para garantir idempotência
+                imported.append(filename)
+                processed_filenames.add(filename)
+                marker_path.write_text(json.dumps(imported))
+            except Exception as e:
+                await ContextDocumentRepository.mark_failed(db, doc, str(e))
+                await db.commit()
+                logger.error("  ✗ Falha ao indexar seed %s: %s", filename, e)
 
-                except Exception as e:
-                    logger.error("Erro ao indexar %s: %s", filename, e)
-
-            logger.info(
-                "✓ Indexação concluída: %d chunks da lei | %d chunks de TRs",
-                lei_indexed, tr_indexed,
-            )
-            cls._indexed = True
+                # Marca como falhou para não re-tentar no próximo boot (evita crash-loop)
+                imported.append(f"FAILED:{filename}")
+                processed_filenames.add(filename)
+                marker_path.write_text(json.dumps(imported))
 
     # ------------------------------------------------------------------ #
     # Busca semântica
@@ -199,8 +233,6 @@ class RagService:
     def ensure_indexed(cls) -> None:
         """Garante que os documentos foram indexados (lazy — só na primeira busca)."""
         if not settings.RAG_ENABLED:
-            return
-        if cls._indexed:
             return
         if cls._client is None:
             cls.setup()
@@ -289,7 +321,7 @@ class RagService:
         chunk_idx = 0
 
         while start < len(text):
-            end = start + CHUNK_SIZE
+            end = start + settings.RAG_CHUNK_SIZE
 
             if end < len(text):
                 break_pos = text.rfind("\n\n", start, end)
@@ -306,7 +338,7 @@ class RagService:
                     "chunk_index": chunk_idx,
                 })
             chunk_idx += 1
-            start = end - CHUNK_OVERLAP
+            start = end - settings.RAG_CHUNK_OVERLAP
 
         return chunks
 
@@ -320,7 +352,7 @@ class RagService:
         if not chunks:
             return
 
-        BATCH_SIZE = 100
+        BATCH_SIZE = 50
 
         for i in range(0, len(chunks), BATCH_SIZE):
             batch = chunks[i:i + BATCH_SIZE]
@@ -349,39 +381,41 @@ class RagService:
             logger.warning("Erro ao remover chunks de '%s': %s", filename, e)
 
     @classmethod
-    def remove_document_chunks(cls, filename: str) -> None:
-        """Remove chunks de um documento da coleção context_extra."""
+    def remove_document_chunks(cls, filename: str, collection: str = "context_extra") -> None:
+        """Remove chunks de um documento da coleção informada."""
         if not settings.RAG_ENABLED:
             return
         if cls._client is None:
             logger.warning("ChromaDB não inicializado — não foi possível remover chunks de '%s'", filename)
             return
         try:
-            extra_collection = cls._client.get_collection("context_extra")
-            cls._remove_chunks_from_collection(extra_collection, filename)
+            col = cls._client.get_collection(collection)
+            cls._remove_chunks_from_collection(col, filename)
         except Exception as e:
-            logger.warning("Erro ao acessar coleção context_extra: %s", e)
+            logger.warning("Erro ao acessar coleção '%s': %s", collection, e)
 
     @classmethod
-    async def index_uploaded_document(cls, storage_path: str, filename: str) -> int:
-        """Indexa um documento de contexto carregado pelo admin na coleção context_extra."""
+    async def index_uploaded_document(
+        cls, storage_path: str, filename: str, collection: str = "context_extra"
+    ) -> int:
+        """Indexa um documento de contexto na coleção informada."""
         if not settings.RAG_ENABLED:
             logger.info("RAG desabilitado — pulando indexação de '%s'", filename)
             return 0
         if cls._client is None:
             await asyncio.to_thread(cls.setup)
 
-        # Garantir que a coleção existe
-        extra_collection = await asyncio.to_thread(
-            lambda: cls._client.get_or_create_collection(
-                name="context_extra",
-                metadata={"description": "Documentos de contexto adicionais — carregados pelo admin"},
-            )
+        target_collection = await asyncio.to_thread(
+            lambda: cls._client.get_or_create_collection(name=collection)
         )
 
         file_path = Path(storage_path)
 
-        if file_path.suffix.lower() == ".pdf":
+        if file_path.suffix.lower() == ".txt":
+            text = await asyncio.to_thread(
+                lambda: file_path.read_text(encoding="utf-8")
+            )
+        elif file_path.suffix.lower() == ".pdf":
             text = await asyncio.to_thread(_extract_pdf_text, file_path)
         else:
             file_bytes = await asyncio.to_thread(file_path.read_bytes)
@@ -389,15 +423,18 @@ class RagService:
             text = await asyncio.to_thread(
                 DocumentService.extract_text_sync, file_bytes, filename
             )
+            del file_bytes  # libera antes do pico de memória do modelo ONNX
 
         chunks = cls._chunk_text(text, filename)
+        del text  # release before ONNX model loads
         if not chunks:
             return 0
+        import gc; gc.collect()
 
         # Remove chunks antigos deste arquivo (evita duplicatas em re-indexação)
-        await asyncio.to_thread(cls._remove_chunks_from_collection, extra_collection, filename)
+        await asyncio.to_thread(cls._remove_chunks_from_collection, target_collection, filename)
 
-        await asyncio.to_thread(cls._add_to_collection, extra_collection, chunks)
+        await asyncio.to_thread(cls._add_to_collection, target_collection, chunks)
         return len(chunks)
 
     @classmethod
@@ -408,13 +445,13 @@ class RagService:
                 "name": "lei_14133",
                 "display_name": "Lei 14.133/2021",
                 "description": "Nova Lei de Licitações e Contratos Administrativos — base legal para análise de TRs",
-                "is_readonly": True,
+                "is_readonly": False,
             },
             {
                 "name": "termos_aprovados",
                 "display_name": "Termos de Referência Aprovados",
                 "description": "TRs pré-aprovados da FSPH usados como exemplos de referência pelo assistente IA",
-                "is_readonly": True,
+                "is_readonly": False,
             },
             {
                 "name": "context_extra",

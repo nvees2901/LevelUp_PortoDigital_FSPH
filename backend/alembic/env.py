@@ -21,6 +21,9 @@ from app.models.term import Term  # noqa: F401
 from app.models.analysis import Analysis  # noqa: F401
 from app.models.chat_session import ChatSession  # noqa: F401
 from app.models.user import User  # noqa: F401
+from app.models.context_document import ContextDocument  # noqa: F401
+from app.models.term_checklist import TermChecklist  # noqa: F401
+from app.models.workflow_event import WorkflowEvent  # noqa: F401
 
 config = context.config
 

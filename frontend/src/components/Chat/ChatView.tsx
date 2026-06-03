@@ -1,23 +1,18 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { Bot, Send, FileText, Paperclip } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
-import { COLORS } from '../../constants';
 import { sendChatMessage, finalizeChatSession, listChatSessions, getChatSession, uploadDocument } from '../../services/api';
 import type { TelaId, MensagemChat, ChatMode, ChatSessionSummary } from '../../types';
+import { renderTexto } from '../../utils';
 
 interface ChatViewProps {
   navegar: (tela: TelaId) => void;
 }
 
-function escapeHtml(s: string) {
-  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-}
-
-function renderTexto(txt: string) {
-  return txt.split('\n').map((line, i) => {
-    const formatted = escapeHtml(line).replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
-    return <p key={i} className={line === '' ? 'h-1' : ''} dangerouslySetInnerHTML={{ __html: formatted }} />;
-  });
+function renderMensagem(txt: string) {
+  return txt.split('\n').map((line, i) => (
+    <p key={i} className={line === '' ? 'h-1' : ''} dangerouslySetInnerHTML={{ __html: renderTexto(line) }} />
+  ));
 }
 
 export default function ChatView({ navegar }: ChatViewProps) {
@@ -28,8 +23,8 @@ export default function ChatView({ navegar }: ChatViewProps) {
     return {
       de: 'ia',
       texto: isDemandante
-        ? 'Ola! Sou o Assistente COLIC da FSPH, treinado na Lei 14.133/2021 e nos fluxos internos. Posso ajudar voce a elaborar processos de contratacao ou analisar documentos. Como posso ajudar?'
-        : `Ola, ${usuario?.nomeUsuarioLogado}! Sou o Assistente COLIC. Posso responder duvidas sobre fluxos da COLIC, modalidades de contratacao, checklist documental e prazos legais. Como posso ajudar?`,
+        ? 'Olá! Sou o Assistente COLIC da FSPH, treinado na Lei 14.133/2021 e nos fluxos internos. Posso ajudar você a elaborar processos de contratação ou analisar documentos. Como posso ajudar?'
+        : `Olá, ${usuario?.nomeUsuarioLogado}! Sou o Assistente COLIC. Posso responder dúvidas sobre fluxos da COLIC, modalidades de contratação, checklist documental e prazos legais. Como posso ajudar?`,
     };
   }
 
@@ -83,7 +78,7 @@ export default function ChatView({ navegar }: ChatViewProps) {
       setAttachedTermId(null);
       setAttachedTermTitle(null);
     } catch {
-      addMsg('ia', 'Nao foi possivel carregar a sessao.');
+      addMsg('ia', 'Não foi possível carregar a sessão.');
     } finally {
       setLoadingSession(false);
     }
@@ -140,7 +135,7 @@ export default function ChatView({ navegar }: ChatViewProps) {
       addMsg('ia', res.message);
       loadSessions(mode);
     } catch (err) {
-      addMsg('ia', err instanceof Error ? err.message : 'Nao foi possivel contactar o assistente. Tente novamente.');
+      addMsg('ia', err instanceof Error ? err.message : 'Não foi possível contactar o assistente. Tente novamente.');
     } finally {
       setAnalisando(false);
     }
@@ -173,7 +168,7 @@ export default function ChatView({ navegar }: ChatViewProps) {
       <div className="hidden sm:flex flex-col w-60 border-r border-slate-200 bg-slate-50">
         <div className="p-3 border-b border-slate-200">
           <button onClick={novaSessao}
-            className="w-full flex items-center justify-center gap-1.5 py-2 px-3 bg-[#0a2f64] text-white rounded-lg text-xs font-bold hover:bg-[#134084] transition">
+            className="w-full flex items-center justify-center gap-1.5 py-2 px-3 bg-brand-primary text-white rounded-lg text-xs font-bold hover:bg-brand-hover transition">
             + Nova conversa
           </button>
         </div>
@@ -186,8 +181,8 @@ export default function ChatView({ navegar }: ChatViewProps) {
             <div className="text-xs text-slate-400 text-center py-4">Nenhuma conversa anterior.</div>
           ) : sessions.map(s => (
             <button key={s.id} onClick={() => loadSession(s.id)} disabled={loadingSession}
-              className={`w-full text-left px-3 py-2 rounded-lg text-xs transition hover:bg-slate-100 disabled:opacity-60 ${s.id === sessionId ? 'bg-blue-50 border border-blue-200 text-[#0a2f64] font-semibold' : 'text-slate-600'}`}>
-              <p className="truncate font-medium">{s.title ?? `Sessao ${s.id.slice(0, 8)}`}</p>
+              className={`w-full text-left px-3 py-2 rounded-lg text-xs transition hover:bg-slate-100 disabled:opacity-60 ${s.id === sessionId ? 'bg-blue-50 border border-blue-200 text-brand-primary font-semibold' : 'text-slate-600'}`}>
+              <p className="truncate font-medium">{s.title ?? `Sessão ${s.id.slice(0, 8)}`}</p>
               <p className="text-slate-400 text-[10px]">{s.message_count} msg • {s.updated_at.slice(0, 10)}</p>
             </button>
           ))}
@@ -198,13 +193,13 @@ export default function ChatView({ navegar }: ChatViewProps) {
       <div className="flex flex-col flex-1 min-w-0">
 
         {/* Header */}
-        <div className="p-4 border-b text-white" style={{ backgroundColor: COLORS.primary }}>
+        <div className="p-4 border-b text-white bg-brand-primary">
           <div className="flex items-center gap-3 mb-3">
             <div className="p-2 bg-white/10 rounded-lg"><Bot size={18} /></div>
             <div className="flex-1">
               <p className="font-bold text-sm">Assistente IA — COLIC/FSPH</p>
               <p className="text-xs text-blue-300">
-                {isDemandante ? 'Elaboracao guiada de processos' : 'Consulta sobre fluxos e legislacao'} • Lei 14.133/2021 • Decreto 342/2023
+                {isDemandante ? 'Elaboração guiada de processos' : 'Consulta sobre fluxos e legislação'} • Lei 14.133/2021 • Decreto 342/2023
               </p>
             </div>
             <div className="text-right text-xs">
@@ -222,7 +217,7 @@ export default function ChatView({ navegar }: ChatViewProps) {
                 disabled={analisando}
                 className={`text-xs px-3 py-1 rounded-full font-medium transition border
                   ${mode === m.id
-                    ? 'bg-white text-[#0a2f64] border-white'
+                    ? 'bg-white text-brand-primary border-white'
                     : 'bg-white/10 text-white border-white/30 hover:bg-white/20'
                   }`}
               >
@@ -237,9 +232,9 @@ export default function ChatView({ navegar }: ChatViewProps) {
           <div className="p-3 border-b border-slate-100 bg-slate-50">
             <p className="text-xs text-slate-500 font-medium mb-2">Perguntas frequentes:</p>
             <div className="flex flex-wrap gap-1.5">
-              {['Como funciona a Dispensa?', 'O que e o DFD?', 'Prazos contratuais', 'Fluxo COLIC/DIROP/DIRAF', 'O que e Inexigibilidade?'].map(q => (
+              {['Como funciona a Dispensa?', 'O que é o DFD?', 'Prazos contratuais', 'Fluxo COLIC/DIROP/DIRAF', 'O que é Inexigibilidade?'].map(q => (
                 <button key={q} onClick={() => setInput(q)}
-                  className="text-xs px-2.5 py-1 bg-white border border-slate-200 rounded-full text-[#0a2f64] hover:border-[#0a2f64] hover:bg-blue-50 transition font-medium">
+                  className="text-xs px-2.5 py-1 bg-white border border-slate-200 rounded-full text-brand-primary hover:border-brand-primary hover:bg-blue-50 transition font-medium">
                   {q}
                 </button>
               ))}
@@ -254,9 +249,8 @@ export default function ChatView({ navegar }: ChatViewProps) {
               <div className={`max-w-[88%] p-3 rounded-2xl text-xs leading-relaxed shadow-sm space-y-0.5
                 ${m.de === 'ia'
                   ? 'bg-white border border-slate-100 text-slate-800 rounded-tl-none'
-                  : 'text-white rounded-tr-none'}`}
-                style={m.de === 'user' ? { backgroundColor: COLORS.primary } : {}}>
-                {m.de === 'ia' ? renderTexto(m.texto) : <p>{m.texto}</p>}
+                  : 'bg-brand-primary text-white rounded-tr-none'}`}>
+                {m.de === 'ia' ? renderMensagem(m.texto) : <p>{m.texto}</p>}
               </div>
             </div>
           ))}
@@ -300,19 +294,18 @@ export default function ChatView({ navegar }: ChatViewProps) {
 
           <form onSubmit={enviar} className="flex gap-2 items-center">
             <input type="text" value={input} onChange={e => setInput(e.target.value)}
-              placeholder={isDemandante ? 'Descreva o objeto da contratacao...' : 'Faca sua pergunta sobre fluxos ou legislacao...'}
-              className="flex-1 py-2 px-3 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#0a2f64]" />
+              placeholder={isDemandante ? 'Descreva o objeto da contratação...' : 'Faça sua pergunta sobre fluxos ou legislação...'}
+              className="flex-1 py-2 px-3 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-primary" />
             {mode === 'analisar' && (
               <button type="button" onClick={() => fileInputRef.current?.click()}
                 disabled={uploadingFile}
-                className="p-2.5 text-slate-400 hover:text-[#0a2f64] border border-slate-300 rounded-lg hover:bg-blue-50 disabled:opacity-40 transition">
+                className="p-2.5 text-slate-400 hover:text-brand-primary border border-slate-300 rounded-lg hover:bg-blue-50 disabled:opacity-40 transition">
                 <Paperclip size={17} />
               </button>
             )}
             <button type="submit"
               disabled={!input.trim() || analisando || uploadingFile}
-              style={{ backgroundColor: COLORS.primary }}
-              className="p-2.5 text-white rounded-lg hover:bg-[#134084] disabled:opacity-40 disabled:cursor-not-allowed transition shadow-sm shrink-0">
+              className="p-2.5 text-white rounded-lg bg-brand-primary hover:bg-brand-hover disabled:opacity-40 disabled:cursor-not-allowed transition shadow-sm shrink-0">
               <Send size={17} />
             </button>
           </form>

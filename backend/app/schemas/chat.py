@@ -7,6 +7,7 @@ o que facilita a integração direta sem transformações extras.
 """
 
 import uuid
+from datetime import datetime
 from typing import Any
 
 from pydantic import BaseModel, Field, field_validator, model_validator
@@ -158,6 +159,16 @@ class ChatSessionResponse(BaseModel):
     def optional_uuid_to_str(cls, v: Any) -> str | None:
         return str(v) if v is not None else None
 
+    @field_validator("created_at", "updated_at", mode="before")
+    @classmethod
+    def datetime_to_isoformat(cls, v: Any) -> str:
+        """Converte datetime do SQLAlchemy para string ISO-8601."""
+        if isinstance(v, datetime):
+            return v.isoformat()
+        if isinstance(v, str):
+            return v
+        return str(v)
+
 
 class ChatSessionSummary(BaseModel):
     """
@@ -179,6 +190,16 @@ class ChatSessionSummary(BaseModel):
     @classmethod
     def uuid_to_str(cls, v: Any) -> str | None:
         return str(v) if v is not None else None
+
+    @field_validator("updated_at", mode="before")
+    @classmethod
+    def datetime_to_isoformat(cls, v: Any) -> str:
+        """Converte datetime do SQLAlchemy para string ISO-8601."""
+        if isinstance(v, datetime):
+            return v.isoformat()
+        if isinstance(v, str):
+            return v
+        return str(v)
 
 
 class ChatSessionListResponse(BaseModel):

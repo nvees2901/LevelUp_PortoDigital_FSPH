@@ -25,14 +25,14 @@ class ErrorBoundary extends Component<{ children: ReactNode }, { error: Error | 
       return (
         <div className="min-h-screen flex items-center justify-center bg-slate-100 p-8">
           <div className="bg-white rounded-xl shadow-lg p-8 max-w-lg w-full">
-            <h1 className="text-2xl font-bold text-red-600 mb-4">Erro na aplicacao</h1>
+            <h1 className="text-2xl font-bold text-red-600 mb-4">Erro na aplicação</h1>
             <p className="text-slate-600 mb-4">{this.state.error.message}</p>
             <pre className="bg-slate-100 p-4 rounded text-xs overflow-auto max-h-40 mb-4">
               {this.state.error.stack}
             </pre>
             <button
               onClick={() => { localStorage.clear(); window.location.reload(); }}
-              className="px-4 py-2 bg-[#0a2f64] text-white rounded-lg hover:bg-[#134084]"
+              className="px-4 py-2 bg-brand-primary text-white rounded-lg hover:bg-brand-hover"
             >
               Limpar dados e recarregar
             </button>
@@ -84,7 +84,7 @@ function AppContent() {
   };
 
   return (
-    <div className="flex flex-col h-screen bg-slate-100 overflow-hidden" style={{ fontFamily: "'Segoe UI', system-ui, sans-serif" }}>
+    <div className="flex flex-col h-screen bg-slate-100 overflow-hidden font-ui">
       <Header />
       <div className="flex flex-1 overflow-hidden">
         <Sidebar telaAtual={telaAtual} navegar={navegar} />

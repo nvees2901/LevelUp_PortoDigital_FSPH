@@ -2,9 +2,9 @@ import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import {
   Upload, FileText, Trash2, RefreshCw, Brain, CheckCircle2,
   Clock, AlertCircle, Download, AlertTriangle, ChevronDown,
-  ChevronRight, Scale, FileCheck, FolderOpen, X,
+  ChevronRight, Scale, FileCheck, FolderOpen, X, Power, PowerOff, Eye,
 } from 'lucide-react';
-import { COLORS } from '../../constants';
+import { formatDate } from '../../utils';
 import {
   listContextDocuments,
   uploadContextDocument,
@@ -12,8 +12,13 @@ import {
   reindexContextDocument,
   downloadContextDocument,
   getKnowledgeBaseCollections,
+  activateContextDocument,
+  deactivateContextDocument,
+  createTextContextDocument,
+  previewContextDocument,
+  fetchContextDocumentBlob,
 } from '../../services/api';
-import type { ContextDocument, KnowledgeBaseCollection, TelaId } from '../../types';
+import type { ContextDocument, ContextDocumentPreviewResponse, KnowledgeBaseCollection, TelaId } from '../../types';
 
 interface ContextDocumentsViewProps {
   navegar: (tela: TelaId) => void;
@@ -107,27 +112,51 @@ interface QueueItem {
   error?: string;
 }
 
+const COLLECTION_OPTIONS = [
+  { value: 'context_extra', label: 'Documentos Adicionais' },
+  { value: 'lei_14133', label: 'Lei 14.133/2021' },
+  { value: 'termos_aprovados', label: 'TRs Aprovados FSPH' },
+] as const;
+
+type CollectionKey = typeof COLLECTION_OPTIONS[number]['value'];
+
 function UploadZone({ onUploaded }: { onUploaded: () => void }) {
   const [dragOver, setDragOver] = useState(false);
   const [queue, setQueue] = useState<QueueItem[]>([]);
+  const [collection, setCollection] = useState<CollectionKey>('context_extra');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  const MAX_FILE_SIZE_MB = 20;
+
   const processFiles = async (files: File[]) => {
-    const valid = files.filter(f => {
-      const ext = f.name.split('.').pop()?.toLowerCase();
-      return ['pdf', 'docx', 'doc'].includes(ext || '');
-    });
+    const isValidExt = (f: File) => ['pdf', 'docx', 'doc'].includes(f.name.split('.').pop()?.toLowerCase() || '');
+    const typeInvalid = files.filter(f => !isValidExt(f));
+    const typeValid = files.filter(isValidExt);
+    const tooLarge = typeValid.filter(f => f.size > MAX_FILE_SIZE_MB * 1024 * 1024);
+    const valid = typeValid.filter(f => f.size <= MAX_FILE_SIZE_MB * 1024 * 1024);
 
-    if (valid.length === 0) return;
+    const initial: QueueItem[] = [
+      ...typeInvalid.map(f => ({ file: f, status: 'error' as const, error: 'Formato não suportado. Use PDF, DOCX ou DOC.' })),
+      ...tooLarge.map(f => ({ file: f, status: 'error' as const, error: `Arquivo excede ${MAX_FILE_SIZE_MB} MB.` })),
+      ...valid.map(f => ({ file: f, status: 'uploading' as const })),
+    ];
 
-    const initial: QueueItem[] = valid.map(f => ({ file: f, status: 'uploading' }));
+    if (initial.length === 0) return;
+
     setQueue(initial);
 
-    const results = await Promise.allSettled(valid.map(f => uploadContextDocument(f)));
+    if (valid.length === 0) {
+      setTimeout(() => setQueue([]), 4000);
+      return;
+    }
+
+    const errOffset = typeInvalid.length + tooLarge.length;
+    const results = await Promise.allSettled(valid.map(f => uploadContextDocument(f, collection)));
 
     setQueue(prev =>
       prev.map((item, i) => {
-        const result = results[i];
+        if (i < errOffset) return item;
+        const result = results[i - errOffset];
         if (result.status === 'fulfilled') return { ...item, status: 'done' };
         const msg = result.reason instanceof Error ? result.reason.message : 'Erro no upload';
         return { ...item, status: 'error', error: msg };
@@ -154,6 +183,19 @@ function UploadZone({ onUploaded }: { onUploaded: () => void }) {
 
   return (
     <div className="space-y-2">
+      <div className="bg-white rounded-xl border border-slate-200 px-4 py-3 flex items-center gap-3">
+        <label className="text-xs font-medium text-slate-500 shrink-0">Base de destino:</label>
+        <select
+          value={collection}
+          onChange={e => setCollection(e.target.value as CollectionKey)}
+          disabled={isUploading}
+          className="flex-1 text-sm border border-slate-200 rounded-lg px-2 py-1.5 focus:outline-none focus:border-brand-primary transition-colors disabled:opacity-50"
+        >
+          {COLLECTION_OPTIONS.map(o => (
+            <option key={o.value} value={o.value}>{o.label}</option>
+          ))}
+        </select>
+      </div>
       <div
         onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
         onDragLeave={() => setDragOver(false)}
@@ -161,7 +203,7 @@ function UploadZone({ onUploaded }: { onUploaded: () => void }) {
         onClick={() => !isUploading && fileInputRef.current?.click()}
         className={`bg-white rounded-xl border-2 border-dashed p-8 text-center transition-colors ${
           isUploading ? 'cursor-default border-slate-200' :
-          dragOver ? 'border-[#0a2f64] bg-blue-50 cursor-copy' : 'border-slate-300 hover:border-[#0a2f64] cursor-pointer'
+          dragOver ? 'border-brand-primary bg-blue-50 cursor-copy' : 'border-slate-300 hover:border-brand-primary cursor-pointer'
         }`}
       >
         <input ref={fileInputRef} type="file" accept=".pdf,.docx,.doc" multiple className="hidden" onChange={handleChange} />
@@ -174,7 +216,7 @@ function UploadZone({ onUploaded }: { onUploaded: () => void }) {
         <div className="bg-white rounded-xl border border-slate-200 divide-y divide-slate-50">
           {queue.map((item, i) => (
             <div key={i} className="flex items-center gap-3 px-4 py-2.5">
-              {item.status === 'uploading' && <RefreshCw size={14} className="text-[#0a2f64] animate-spin shrink-0" />}
+              {item.status === 'uploading' && <RefreshCw size={14} className="text-brand-primary animate-spin shrink-0" />}
               {item.status === 'done' && <CheckCircle2 size={14} className="text-emerald-500 shrink-0" />}
               {item.status === 'error' && <AlertCircle size={14} className="text-red-500 shrink-0" />}
               <span className="text-sm text-slate-700 truncate flex-1">{item.file.name}</span>
@@ -185,6 +227,113 @@ function UploadZone({ onUploaded }: { onUploaded: () => void }) {
         </div>
       )}
     </div>
+  );
+}
+
+// ─── TextInputZone ────────────────────────────────────────────────────────────
+
+function TextInputZone({ onAdded }: { onAdded: () => void }) {
+  const [title, setTitle] = useState('');
+  const [content, setContent] = useState('');
+  const [collection, setCollection] = useState<CollectionKey>('context_extra');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState(false);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError(null);
+    setSuccess(false);
+
+    const MAX_BYTES = 20 * 1024 * 1024; // 20 MB
+    const contentBytes = new Blob([content]).size;
+    if (contentBytes > MAX_BYTES) {
+      setError(`Texto muito grande: ${(contentBytes / 1024 / 1024).toFixed(1)} MB. Máximo: 20 MB.`);
+      return;
+    }
+
+    setLoading(true);
+    try {
+      await createTextContextDocument(title, content, collection);
+      setTitle('');
+      setContent('');
+      setCollection('context_extra');
+      setSuccess(true);
+      onAdded();
+      setTimeout(() => setSuccess(false), 3000);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Erro ao adicionar texto');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <form onSubmit={handleSubmit} className="space-y-2">
+      <div className="bg-white rounded-xl border border-slate-200 px-4 py-3 flex items-center gap-3">
+        <label className="text-xs font-medium text-slate-500 shrink-0">Base de destino:</label>
+        <select
+          value={collection}
+          onChange={e => setCollection(e.target.value as CollectionKey)}
+          disabled={loading}
+          className="flex-1 text-sm border border-slate-200 rounded-lg px-2 py-1.5 focus:outline-none focus:border-brand-primary transition-colors disabled:opacity-50"
+        >
+          {COLLECTION_OPTIONS.map(o => (
+            <option key={o.value} value={o.value}>{o.label}</option>
+          ))}
+        </select>
+      </div>
+      <div className="bg-white rounded-xl border border-slate-200 p-4 space-y-3">
+        <div>
+          <label className="block text-xs font-medium text-slate-500 mb-1">Título</label>
+          <input
+            type="text"
+            value={title}
+            onChange={e => setTitle(e.target.value)}
+            disabled={loading}
+            placeholder="Ex: Política de Compras 2024"
+            minLength={3}
+            maxLength={200}
+            required
+            className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:border-brand-primary transition-colors disabled:opacity-50"
+          />
+        </div>
+        <div>
+          <label className="block text-xs font-medium text-slate-500 mb-1">Conteúdo</label>
+          <textarea
+            value={content}
+            onChange={e => setContent(e.target.value)}
+            disabled={loading}
+            placeholder="Cole ou digite o texto que será indexado na base de conhecimento..."
+            minLength={10}
+            required
+            rows={6}
+            className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:border-brand-primary transition-colors disabled:opacity-50 resize-y"
+          />
+        </div>
+        <div className="flex items-center justify-between gap-3">
+          {error && (
+            <p className="text-xs text-red-500 flex-1">{error}</p>
+          )}
+          {success && !error && (
+            <span className="text-xs text-emerald-600 flex items-center gap-1 flex-1">
+              <CheckCircle2 size={12} /> Texto adicionado com sucesso
+            </span>
+          )}
+          {!error && !success && <span className="flex-1" />}
+          <button
+            type="submit"
+            disabled={loading}
+            className="px-4 py-2 text-sm font-medium text-white bg-brand-primary hover:bg-brand-primary/90 rounded-lg transition-colors flex items-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed shrink-0"
+          >
+            {loading
+              ? <><RefreshCw size={14} className="animate-spin" /> Enviando...</>
+              : <><FileText size={14} /> Adicionar à base de conhecimento</>
+            }
+          </button>
+        </div>
+      </div>
+    </form>
   );
 }
 
@@ -248,7 +397,158 @@ function DeleteConfirmModal({
   );
 }
 
+// ─── DocumentPreviewModal ─────────────────────────────────────────────────────
+
+interface DocumentPreviewModalProps {
+  doc: ContextDocument | null;
+  onClose: () => void;
+}
+
+function DocumentPreviewModal({ doc, onClose }: DocumentPreviewModalProps) {
+  const [state, setState] = useState<'loading' | 'ready' | 'error'>('loading');
+  const [preview, setPreview] = useState<ContextDocumentPreviewResponse | null>(null);
+  const [blobUrl, setBlobUrl] = useState<string | null>(null);
+  const [errorMsg, setErrorMsg] = useState('');
+
+  useEffect(() => {
+    if (!doc) return;
+    setState('loading');
+    setPreview(null);
+    setBlobUrl(null);
+    setErrorMsg('');
+
+    if (doc.mime_type === 'application/pdf') {
+      fetchContextDocumentBlob(doc.id)
+        .then(blob => {
+          setBlobUrl(URL.createObjectURL(blob));
+          setState('ready');
+        })
+        .catch(() => {
+          setErrorMsg('Não foi possível carregar o PDF.');
+          setState('error');
+        });
+    } else {
+      previewContextDocument(doc.id)
+        .then(data => {
+          setPreview(data);
+          setState('ready');
+        })
+        .catch(() => {
+          setErrorMsg('Não foi possível carregar a prévia.');
+          setState('error');
+        });
+    }
+  }, [doc]);
+
+  // Revogar blob URL ao fechar para liberar memória
+  useEffect(() => {
+    return () => {
+      if (blobUrl) URL.revokeObjectURL(blobUrl);
+    };
+  }, [blobUrl]);
+
+  // Fechar com Escape
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    document.addEventListener('keydown', handler);
+    return () => document.removeEventListener('keydown', handler);
+  }, [onClose]);
+
+  if (!doc) return null;
+
+  const collectionLabel: Record<string, string> = {
+    context_extra: 'Adicional',
+    lei_14133: 'Lei 14.133',
+    termos_aprovados: 'TRs Aprovados',
+  };
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4"
+      onClick={onClose}
+    >
+      <div
+        className="bg-white rounded-xl shadow-2xl w-full max-w-4xl max-h-[90vh] flex flex-col"
+        onClick={e => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div className="flex items-center gap-3 px-5 py-4 border-b border-slate-100 shrink-0">
+          <FileText size={16} className="text-slate-400 shrink-0" />
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-medium text-slate-800 truncate">{doc.original_filename}</p>
+            <p className="text-xs text-slate-400">{collectionLabel[doc.collection] ?? doc.collection}</p>
+          </div>
+          <button
+            onClick={() => downloadContextDocument(doc.id, doc.original_filename)}
+            title="Baixar arquivo original"
+            className="p-2 text-slate-400 hover:text-brand-primary hover:bg-blue-50 rounded-lg transition-colors"
+          >
+            <Download size={15} />
+          </button>
+          <button
+            onClick={onClose}
+            className="p-2 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition-colors"
+          >
+            <X size={15} />
+          </button>
+        </div>
+
+        {/* Body */}
+        <div className="flex-1 overflow-hidden">
+          {state === 'loading' && (
+            <div className="flex items-center justify-center h-64">
+              <div className="animate-spin rounded-full h-8 w-8 border-2 border-brand-primary border-t-transparent" />
+            </div>
+          )}
+
+          {state === 'error' && (
+            <div className="flex items-center justify-center h-64 text-sm text-red-500 gap-2">
+              <AlertCircle size={16} />
+              {errorMsg}
+            </div>
+          )}
+
+          {state === 'ready' && doc.mime_type === 'application/pdf' && blobUrl && (
+            <iframe
+              src={blobUrl}
+              className="w-full h-full"
+              style={{ minHeight: '70vh' }}
+              title={doc.original_filename}
+            />
+          )}
+
+          {state === 'ready' && preview && (
+            <div className="h-full overflow-y-auto p-5">
+              {preview.truncated && (
+                <div className="mb-3 flex items-center gap-2 text-xs text-amber-600 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+                  <AlertTriangle size={13} />
+                  Exibindo apenas os primeiros 3.000 caracteres.
+                </div>
+              )}
+              <pre className="text-xs text-slate-700 whitespace-pre-wrap font-mono leading-relaxed">
+                {preview.text}
+              </pre>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── DocumentList ─────────────────────────────────────────────────────────────
+
+const COLLECTION_ICONS: Record<string, React.ReactNode> = {
+  lei_14133: <Scale size={14} className="text-blue-600 shrink-0" />,
+  termos_aprovados: <FileCheck size={14} className="text-violet-600 shrink-0" />,
+  context_extra: <FolderOpen size={14} className="text-slate-400 shrink-0" />,
+};
+
+const COLLECTION_LABELS: Record<string, string> = {
+  lei_14133: 'Lei 14.133',
+  termos_aprovados: 'TRs Aprovados',
+  context_extra: 'Adicionais',
+};
 
 type StatusFilter = 'all' | 'indexed' | 'pending' | 'failed';
 
@@ -259,6 +559,8 @@ function DocumentList({
   onDelete,
   onRetry,
   onDownload,
+  onToggleActive,
+  onPreview,
 }: {
   docs: ContextDocument[];
   loading: boolean;
@@ -266,6 +568,8 @@ function DocumentList({
   onDelete: (doc: ContextDocument) => void;
   onRetry: (doc: ContextDocument) => void;
   onDownload: (doc: ContextDocument) => void;
+  onToggleActive: (doc: ContextDocument) => void;
+  onPreview: (doc: ContextDocument) => void;
 }) {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
@@ -297,7 +601,7 @@ function DocumentList({
               placeholder="Buscar por nome..."
               value={search}
               onChange={e => setSearch(e.target.value)}
-              className="w-full pl-8 pr-3 py-1.5 text-sm border border-slate-200 rounded-lg focus:outline-none focus:border-[#0a2f64] transition-colors"
+              className="w-full pl-8 pr-3 py-1.5 text-sm border border-slate-200 rounded-lg focus:outline-none focus:border-brand-primary transition-colors"
             />
             {search && (
               <button onClick={() => setSearch('')} className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
@@ -312,10 +616,9 @@ function DocumentList({
                 onClick={() => setStatusFilter(p.key)}
                 className={`px-3 py-1.5 text-xs font-medium rounded-full transition-colors ${
                   statusFilter === p.key
-                    ? 'text-white'
+                    ? 'bg-brand-primary text-white'
                     : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
                 }`}
-                style={statusFilter === p.key ? { backgroundColor: COLORS.primary } : undefined}
               >
                 {p.label}
                 {p.key !== 'all' && docs.filter(d => d.status === p.key).length > 0 && (
@@ -324,7 +627,7 @@ function DocumentList({
               </button>
             ))}
           </div>
-          <button onClick={onRefresh} className="text-xs text-slate-400 hover:text-[#0a2f64] flex items-center gap-1 ml-auto shrink-0">
+          <button onClick={onRefresh} className="text-xs text-slate-400 hover:text-brand-primary flex items-center gap-1 ml-auto shrink-0">
             <RefreshCw size={12} /> Atualizar
           </button>
         </div>
@@ -342,7 +645,7 @@ function DocumentList({
       ) : filtered.length === 0 ? (
         <div className="p-8 text-center">
           <p className="text-sm text-slate-400">Nenhum documento encontrado para "{search}"</p>
-          <button onClick={() => { setSearch(''); setStatusFilter('all'); }} className="text-xs text-[#0a2f64] mt-2 hover:underline">
+          <button onClick={() => { setSearch(''); setStatusFilter('all'); }} className="text-xs text-brand-primary mt-2 hover:underline">
             Limpar filtros
           </button>
         </div>
@@ -351,6 +654,7 @@ function DocumentList({
           <thead className="bg-slate-50 border-b border-slate-100">
             <tr>
               <th className="text-left px-4 py-2.5 text-xs text-slate-500 font-semibold">Arquivo</th>
+              <th className="text-left px-4 py-2.5 text-xs text-slate-500 font-semibold">Base</th>
               <th className="text-left px-4 py-2.5 text-xs text-slate-500 font-semibold">Tamanho</th>
               <th className="text-left px-4 py-2.5 text-xs text-slate-500 font-semibold">Status</th>
               <th className="text-left px-4 py-2.5 text-xs text-slate-500 font-semibold">Data</th>
@@ -359,14 +663,19 @@ function DocumentList({
           </thead>
           <tbody>
             {filtered.map(doc => (
-              <tr key={doc.id} className="border-b border-slate-50 hover:bg-slate-50 transition-colors">
+              <tr key={doc.id} className={`border-b border-slate-50 hover:bg-slate-50 transition-colors ${!doc.is_active ? 'opacity-60' : ''}`}>
                 <td className="px-4 py-3">
                   <div className="flex items-center gap-2">
                     <FileText size={14} className="text-slate-400 shrink-0" />
                     <span className="text-slate-700 truncate max-w-xs" title={doc.original_filename}>
                       {doc.original_filename}
                     </span>
-                    {doc.chunks_count !== null && (
+                    {doc.is_seed && (
+                      <span className="ml-2 inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-700 shrink-0">
+                        Seed
+                      </span>
+                    )}
+                    {doc.chunks_count !== null && doc.chunks_count > 0 && (
                       <span className="text-xs text-slate-400 shrink-0">({doc.chunks_count} chunks)</span>
                     )}
                   </div>
@@ -376,32 +685,72 @@ function DocumentList({
                     </p>
                   )}
                 </td>
+                <td className="px-4 py-3">
+                  <div className="flex items-center gap-1.5">
+                    {COLLECTION_ICONS[doc.collection] ?? <FolderOpen size={14} className="text-slate-400 shrink-0" />}
+                    <span className="text-xs text-slate-500">{COLLECTION_LABELS[doc.collection] ?? doc.collection}</span>
+                  </div>
+                </td>
                 <td className="px-4 py-3 text-slate-500 text-xs">{formatBytes(doc.size_bytes)}</td>
-                <td className="px-4 py-3"><StatusBadge status={doc.status} /></td>
+                <td className="px-4 py-3">
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <StatusBadge status={doc.status} />
+                    {!doc.is_active && (
+                      <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-slate-200 text-slate-500">Inativo</span>
+                    )}
+                  </div>
+                </td>
                 <td className="px-4 py-3 text-slate-400 text-xs">
-                  {new Date(doc.uploaded_at).toLocaleDateString('pt-BR')}
+                  {formatDate(doc.uploaded_at)}
                 </td>
                 <td className="px-4 py-3">
                   <div className="flex items-center gap-1 justify-end">
                     <button
+                      onClick={() => onPreview(doc)}
+                      title="Pré-visualizar documento"
+                      className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded transition-colors"
+                    >
+                      <Eye size={14} />
+                    </button>
+                    <button
                       onClick={() => onDownload(doc)}
                       title="Baixar arquivo original"
-                      className="p-1.5 text-slate-400 hover:text-[#0a2f64] hover:bg-blue-50 rounded transition-colors"
+                      className="p-1.5 text-slate-400 hover:text-brand-primary hover:bg-blue-50 rounded transition-colors"
                     >
                       <Download size={14} />
                     </button>
-                    <button
-                      onClick={() => onRetry(doc)}
-                      disabled={doc.status === 'pending'}
-                      title={doc.status === 'pending' ? 'Em indexação...' : 'Re-indexar documento'}
-                      className={`p-1.5 rounded transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${
-                        doc.status === 'failed'
-                          ? 'text-amber-500 hover:text-amber-700 hover:bg-amber-50'
-                          : 'text-slate-400 hover:text-slate-600 hover:bg-slate-100'
-                      }`}
-                    >
-                      <RefreshCw size={14} />
-                    </button>
+                    {doc.is_active && (
+                      <button
+                        onClick={() => onRetry(doc)}
+                        disabled={doc.status === 'pending'}
+                        title={doc.status === 'pending' ? 'Em indexação...' : 'Re-indexar documento'}
+                        className={`p-1.5 rounded transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${
+                          doc.status === 'failed'
+                            ? 'text-amber-500 hover:text-amber-700 hover:bg-amber-50'
+                            : 'text-slate-400 hover:text-slate-600 hover:bg-slate-100'
+                        }`}
+                      >
+                        <RefreshCw size={14} />
+                      </button>
+                    )}
+                    {(doc.is_active && doc.status === 'indexed') && (
+                      <button
+                        onClick={() => onToggleActive(doc)}
+                        title="Desativar TR (remove chunks do ChromaDB)"
+                        className="p-1.5 text-slate-400 hover:text-amber-600 hover:bg-amber-50 rounded transition-colors"
+                      >
+                        <PowerOff size={14} />
+                      </button>
+                    )}
+                    {!doc.is_active && (
+                      <button
+                        onClick={() => onToggleActive(doc)}
+                        title="Reativar TR (re-indexa no ChromaDB)"
+                        className="p-1.5 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 rounded transition-colors"
+                      >
+                        <Power size={14} />
+                      </button>
+                    )}
                     <button
                       onClick={() => onDelete(doc)}
                       title="Remover documento"
@@ -421,12 +770,6 @@ function DocumentList({
 }
 
 // ─── FixedCollections ─────────────────────────────────────────────────────────
-
-const COLLECTION_ICONS: Record<string, React.ReactNode> = {
-  lei_14133: <Scale size={16} className="text-blue-600 shrink-0" />,
-  termos_aprovados: <FileCheck size={16} className="text-violet-600 shrink-0" />,
-  context_extra: <FolderOpen size={16} className="text-slate-500 shrink-0" />,
-};
 
 function FixedCollections() {
   const [expanded, setExpanded] = useState(false);
@@ -470,13 +813,10 @@ function FixedCollections() {
             <div className="divide-y divide-slate-50">
               {collections.map(col => (
                 <div key={col.name} className="flex items-start gap-3 px-5 py-4">
-                  {COLLECTION_ICONS[col.name] ?? <FolderOpen size={16} className="text-slate-500 shrink-0" />}
+                  {COLLECTION_ICONS[col.name] ?? <FolderOpen size={14} className="text-slate-500 shrink-0" />}
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
                       <span className="text-sm font-medium text-slate-800">{col.display_name}</span>
-                      {col.is_readonly && (
-                        <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-blue-50 text-blue-600">Somente leitura</span>
-                      )}
                     </div>
                     <p className="text-xs text-slate-500 mt-0.5">{col.description}</p>
                   </div>
@@ -503,6 +843,7 @@ export default function ContextDocumentsView({ navegar: _navegar }: ContextDocum
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<ContextDocument | null>(null);
+  const [previewDoc, setPreviewDoc] = useState<ContextDocument | null>(null);
   const pollRef = useRef<number | null>(null);
 
   const fetchDocs = useCallback(async () => {
@@ -567,12 +908,26 @@ export default function ContextDocumentsView({ navegar: _navegar }: ContextDocum
     }
   };
 
+  const handleToggleActive = async (doc: ContextDocument) => {
+    setError(null);
+    setDocs(prev => prev.map(d => d.id === doc.id ? { ...d, status: 'pending' } : d));
+    try {
+      const updated = doc.is_active
+        ? await deactivateContextDocument(doc.id)
+        : await activateContextDocument(doc.id);
+      setDocs(prev => prev.map(d => d.id === doc.id ? updated : d));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Erro ao alterar estado do documento');
+      await fetchDocs();
+    }
+  };
+
   return (
     <div className="max-w-6xl mx-auto space-y-5">
       {/* Header */}
       <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-5">
         <div className="flex items-center gap-3">
-          <div className="p-2 rounded-lg" style={{ backgroundColor: COLORS.primary }}>
+          <div className="p-2 rounded-lg bg-brand-primary">
             <Brain size={20} className="text-white" />
           </div>
           <div>
@@ -587,6 +942,14 @@ export default function ContextDocumentsView({ navegar: _navegar }: ContextDocum
 
       {/* Upload */}
       <UploadZone onUploaded={fetchDocs} />
+
+      {/* Text input */}
+      <div className="relative flex items-center gap-3">
+        <div className="flex-1 h-px bg-slate-200" />
+        <span className="text-xs text-slate-400 shrink-0">ou adicione texto diretamente</span>
+        <div className="flex-1 h-px bg-slate-200" />
+      </div>
+      <TextInputZone onAdded={fetchDocs} />
 
       {/* Error banner */}
       {error && (
@@ -604,6 +967,8 @@ export default function ContextDocumentsView({ navegar: _navegar }: ContextDocum
         onDelete={setDeleteTarget}
         onRetry={handleRetry}
         onDownload={handleDownload}
+        onToggleActive={handleToggleActive}
+        onPreview={doc => setPreviewDoc(doc)}
       />
 
       {/* Fixed collections */}
@@ -617,6 +982,12 @@ export default function ContextDocumentsView({ navegar: _navegar }: ContextDocum
           onCancel={() => setDeleteTarget(null)}
         />
       )}
+
+      {/* Preview modal */}
+      <DocumentPreviewModal
+        doc={previewDoc}
+        onClose={() => setPreviewDoc(null)}
+      />
     </div>
   );
 }

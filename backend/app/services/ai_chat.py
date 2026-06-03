@@ -17,9 +17,6 @@ from app.utils.logging import get_logger
 
 logger = get_logger(__name__)
 
-# Timeout para chamadas à API (em segundos)
-_API_TIMEOUT = 60.0
-
 # Gemini client singleton
 _gemini_client = None
 
@@ -37,7 +34,7 @@ def _get_gemini_client():
 # ------------------------------------------------------------------ #
 
 SYSTEM_PROMPTS: dict[str, str] = {
-    "gerar": """Você é um especialista em licitações e contratações públicas da FSPH (Fundação de Saúde Pública de Pernambuco), com profundo conhecimento da Lei nº 14.133/2021.
+    "gerar": """Você é um especialista em licitações e contratações públicas da FSPH (Fundação de Saúde Parreiras Horta), com profundo conhecimento da Lei nº 14.133/2021.
 
 Seu papel é auxiliar gestores a criar Termos de Referência (TR) completos, em conformidade legal, usando como base os documentos abaixo.
 
@@ -97,6 +94,59 @@ Use os documentos abaixo como base para suas respostas.
 }
 
 
+# Keywords that indicate a complete Termo de Referência has been generated
+_TR_COMPLETE_KEYWORDS: tuple[str, ...] = (
+    "TERMO DE REFERÊNCIA",
+    "Art. 6",
+    "justificativa:",
+    "Objeto:",
+    "1. OBJETO",
+    "1. Objeto",
+)
+
+# Prompt usado para SINTETIZAR o TR final a partir do histórico do chat.
+_SYNTH_SYSTEM = """Você é um redator técnico da FSPH (Fundação de Saúde Parreiras Horta) especializado em Termos de Referência sob a Lei nº 14.133/2021.
+
+TAREFA: a partir das informações fornecidas pelo gestor na conversa, redigir o TERMO DE REFERÊNCIA FINAL, completo e pronto, em Markdown.
+
+REGRAS OBRIGATÓRIAS:
+- Produza SOMENTE o Termo de Referência. NADA de saudações, perguntas, comentários, introduções ("aqui está", "com base no contexto") ou fechos ("espero que ajude").
+- Estruture nas seções do Art. 6º, XXIII, numeradas sequencialmente, exatamente com estes títulos:
+  "## 1. OBJETO", "## 2. JUSTIFICATIVA", "## 3. VALOR ESTIMADO",
+  "## 4. CRITÉRIO DE JULGAMENTO", "## 5. PRAZO DE EXECUÇÃO",
+  "## 6. LOCAL DE ENTREGA/EXECUÇÃO", "## 7. MODALIDADE DE LICITAÇÃO",
+  "## 8. OBRIGAÇÕES DAS PARTES". Acrescente "## 9. SUSTENTABILIDADE" e
+  "## 10. GARANTIA" quando aplicável. NUNCA escreva a letra "N" no lugar do número.
+- Não repita o título "Termo de Referência" como linha de texto; comece direto na seção 1.
+- Ao final de cada seção, cite o dispositivo correspondente da Lei nº 14.133/2021.
+- Use APENAS os dados ditos pelo gestor. Onde faltar informação, escreva [A DEFINIR] — NÃO invente valores, prazos ou nomes.
+- Linguagem formal, impessoal e objetiva (padrão de documento de governo)."""
+
+_MODELO_CACHE: str | None = None
+_MODELO_FILE = "Termo de Referência HEMO 2024.docx"
+
+
+def _load_reference_model() -> str:
+    """Lê um TR aprovado da FSPH (documents/) para servir de modelo de estrutura."""
+    global _MODELO_CACHE
+    if _MODELO_CACHE is not None:
+        return _MODELO_CACHE
+    text = ""
+    try:
+        from pathlib import Path
+
+        from docx import Document
+
+        path = Path(settings.DOCS_PATH) / _MODELO_FILE
+        if path.exists():
+            doc = Document(str(path))
+            text = "\n".join(p.text for p in doc.paragraphs if p.text.strip())
+    except Exception as e:  # noqa: BLE001
+        logger.warning("Modelo de TR indisponível: %s", e)
+    _MODELO_CACHE = text[:3000]
+    return _MODELO_CACHE
+
+
 class AINotConfiguredError(Exception):
     """Raised when no AI provider is configured."""
     pass
@@ -130,7 +180,7 @@ class AIChatService:
 
             client_kwargs: dict[str, Any] = {
                 "api_key": settings.active_api_key,
-                "timeout": _API_TIMEOUT,
+                "timeout": settings.AI_TIMEOUT_SECONDS,
             }
             if settings.active_base_url:
                 client_kwargs["base_url"] = settings.active_base_url
@@ -168,6 +218,69 @@ class AIChatService:
             return await cls._gemini_response(message, mode, history, rag_context, term_content)
 
         return await cls._openai_compat_response(message, mode, history, rag_context, term_content)
+
+    # ------------------------------------------------------------------ #
+    # Síntese do TR final (a partir de todo o histórico do chat)
+    # ------------------------------------------------------------------ #
+    @classmethod
+    async def synthesize_tr(cls, history: list[dict[str, str]]) -> str:
+        """Gera o Termo de Referência FINAL a partir de toda a conversa.
+
+        Usa um TR aprovado da FSPH como modelo de estrutura e instrui o modelo
+        a produzir SOMENTE o TR (sem perguntas/conversa), extraindo os dados
+        ditos pelo gestor ao longo do chat.
+        """
+        cls._ensure_configured()
+
+        modelo = _load_reference_model()
+        modelo_block = (
+            "\n\nMODELO DE REFERÊNCIA (TR aprovado da FSPH — use como referência de "
+            f"estrutura e linguagem, NÃO copie os dados):\n{modelo}\n"
+            if modelo else ""
+        )
+
+        transcript_parts = []
+        for m in history:
+            if m.get("role") not in ("user", "assistant"):
+                continue
+            quem = "Gestor" if m["role"] == "user" else "Assistente"
+            transcript_parts.append(f"{quem}: {m.get('content', '')}")
+        transcript = "\n".join(transcript_parts)[-5000:]
+
+        system_content = _SYNTH_SYSTEM + modelo_block
+        user_content = (
+            "INFORMAÇÕES FORNECIDAS NA CONVERSA (extraia o que for relevante e "
+            "ignore perguntas, saudações e comentários):\n\n"
+            f"{transcript}\n\n"
+            "Gere agora o Termo de Referência final, completo e estruturado."
+        )
+
+        client = cls._get_client()
+        extra_headers = {}
+        if settings.OPENROUTER_API_KEY:
+            extra_headers = {
+                "HTTP-Referer": "https://fsph.pe.gov.br",
+                "X-Title": "FSPH - Sistema de Analise de TRs",
+            }
+
+        try:
+            response = await client.chat.completions.create(
+                model=settings.active_model,
+                messages=[
+                    {"role": "system", "content": system_content},
+                    {"role": "user", "content": user_content},
+                ],
+                max_tokens=3000,
+                temperature=0.3,
+                extra_headers=extra_headers,
+            )
+        except Exception as e:  # noqa: BLE001
+            logger.error("Erro na síntese de TR: %s", str(e), exc_info=True)
+            raise AIProviderError(f"Erro ao gerar o TR: {e}") from e
+
+        content = response.choices[0].message.content or ""
+        from app.services.pdf_generator import clean_tr_content
+        return clean_tr_content(content)
 
     # ------------------------------------------------------------------ #
     # Streaming
@@ -256,13 +369,7 @@ class AIChatService:
             raise AIProviderError(f"Erro ao chamar provedor de IA: {e}") from e
 
         # Detecta se TR foi gerado
-        term_complete = (
-            mode == "gerar"
-            and any(kw in full_content for kw in [
-                "TERMO DE REFERÊNCIA", "Art. 6", "justificativa:",
-                "Objeto:", "1. OBJETO", "1. Objeto",
-            ])
-        )
+        term_complete = cls._detect_term_complete(mode, full_content)
 
         yield json.dumps({"done": True, "term_complete": term_complete, })
 
@@ -298,6 +405,15 @@ class AIChatService:
             resolved = template.replace("{rag_context}", rag_text)
 
         return resolved
+
+    @staticmethod
+    def _detect_term_complete(mode: str, content: str) -> bool:
+        """Retorna True se o conteúdo indica que um TR completo foi gerado.
+
+        Centraliza a detecção usada em todos os caminhos de resposta
+        (Gemini/OpenAI, streaming/não-streaming).
+        """
+        return mode == "gerar" and any(kw in content for kw in _TR_COMPLETE_KEYWORDS)
 
     @classmethod
     async def _gemini_response(
@@ -342,13 +458,7 @@ class AIChatService:
 
         content = response.text or ""
 
-        term_complete = (
-            mode == "gerar"
-            and any(kw in content for kw in [
-                "TERMO DE REFERÊNCIA", "Art. 6", "justificativa:",
-                "Objeto:", "1. OBJETO", "1. Objeto",
-            ])
-        )
+        term_complete = cls._detect_term_complete(mode, content)
 
         logger.info("Gemini response: chars=%d term_complete=%s", len(content), term_complete)
 
@@ -402,13 +512,7 @@ class AIChatService:
             logger.error("Erro Gemini stream: %s", str(e), exc_info=True)
             raise AIProviderError(f"Erro ao chamar Gemini: {e}") from e
 
-        term_complete = (
-            mode == "gerar"
-            and any(kw in full_content for kw in [
-                "TERMO DE REFERÊNCIA", "Art. 6", "justificativa:",
-                "Objeto:", "1. OBJETO", "1. Objeto",
-            ])
-        )
+        term_complete = cls._detect_term_complete(mode, full_content)
 
         yield json.dumps({"done": True, "term_complete": term_complete})
 
@@ -466,13 +570,7 @@ class AIChatService:
         content = response.choices[0].message.content or ""
 
         # Detecta se TR foi gerado (modo 'gerar')
-        term_complete = (
-            mode == "gerar"
-            and any(kw in content for kw in [
-                "TERMO DE REFERÊNCIA", "Art. 6", "justificativa:",
-                "Objeto:", "1. OBJETO", "1. Objeto",
-            ])
-        )
+        term_complete = cls._detect_term_complete(mode, content)
 
         logger.info(
             "%s response: tokens=%s term_complete=%s",
@@ -493,7 +591,7 @@ class AIChatService:
         try:
             from app.services.rag_service import RagService
 
-            if not RagService._indexed:
+            if RagService._client is None:
                 return ""
 
             return RagService.get_full_context(query)

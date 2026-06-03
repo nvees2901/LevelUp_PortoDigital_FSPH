@@ -18,8 +18,6 @@ from app.repositories.term import TermRepository
 from app.schemas.analysis import (
     AnalysisRequest,
     AnalysisResponse,
-    CriterionResult,
-    Suggestion,
 )
 from app.services.compliance import ComplianceService
 from app.utils.exceptions import AnalysisNotFoundError, DocumentNotFoundError
@@ -60,19 +58,12 @@ async def analyze_term(payload: AnalysisRequest, db: DbDep):
         "legal_references": compliance["legal_references"],
     })
 
-    # Atualiza status do TR
-    await TermRepository.update(db, str(term.id), {"status": compliance["status"]})
+    # O veredito da análise (aprovado/alerta/reprovado) fica no registro de
+    # análise; NÃO é gravado em term.status, que usa o enum próprio do termo
+    # (gravar o veredito ali quebrava o enum term_status). O fluxo de aprovação
+    # está fora do MVP.
 
-    return AnalysisResponse(
-        id=str(analysis.id),
-        term_id=str(analysis.term_id),
-        compliance_score=analysis.compliance_score,
-        status=analysis.status,
-        criteria_results=[CriterionResult(**r) for r in analysis.criteria_results],
-        suggestions=[Suggestion(**s) for s in analysis.suggestions],
-        legal_references=analysis.legal_references,
-        created_at=str(analysis.created_at),
-    )
+    return AnalysisResponse.from_orm_analysis(analysis)
 
 
 @router.get("/term/{term_id}", response_model=list[AnalysisResponse])
@@ -85,19 +76,7 @@ async def get_analyses_by_term(term_id: str, db: DbDep):
         raise DocumentNotFoundError(term_id)
 
     analyses = await AnalysisRepository.list_by_term(db, term_id)
-    return [
-        AnalysisResponse(
-            id=str(a.id),
-            term_id=str(a.term_id),
-            compliance_score=a.compliance_score,
-            status=a.status,
-            criteria_results=[CriterionResult(**r) for r in a.criteria_results],
-            suggestions=[Suggestion(**s) for s in a.suggestions],
-            legal_references=a.legal_references,
-            created_at=str(a.created_at),
-        )
-        for a in analyses
-    ]
+    return [AnalysisResponse.from_orm_analysis(a) for a in analyses]
 
 
 @router.get("/{analysis_id}", response_model=AnalysisResponse)
@@ -107,13 +86,4 @@ async def get_analysis(analysis_id: str, db: DbDep):
     if not analysis:
         raise AnalysisNotFoundError(analysis_id)
 
-    return AnalysisResponse(
-        id=str(analysis.id),
-        term_id=str(analysis.term_id),
-        compliance_score=analysis.compliance_score,
-        status=analysis.status,
-        criteria_results=[CriterionResult(**r) for r in analysis.criteria_results],
-        suggestions=[Suggestion(**s) for s in analysis.suggestions],
-        legal_references=analysis.legal_references,
-        created_at=str(analysis.created_at),
-    )
+    return AnalysisResponse.from_orm_analysis(analysis)
