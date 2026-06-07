@@ -29,6 +29,18 @@ def _get_gemini_client():
     return _gemini_client
 
 
+# Anthropic (Claude) client singleton
+_anthropic_client = None
+
+def _get_anthropic_client():
+    """Retorna o cliente Anthropic singleton."""
+    global _anthropic_client
+    if _anthropic_client is None:
+        import anthropic
+        _anthropic_client = anthropic.AsyncAnthropic(api_key=settings.ANTHROPIC_API_KEY)
+    return _anthropic_client
+
+
 # ------------------------------------------------------------------ #
 # System Prompts por modo de chat
 # ------------------------------------------------------------------ #
@@ -259,6 +271,9 @@ class AIChatService:
         if settings.is_gemini_mode:
             return await cls._gemini_response(message, mode, history, rag_context, term_content)
 
+        if settings.is_claude_mode:
+            return await cls._anthropic_response(message, mode, history, rag_context, term_content)
+
         return await cls._openai_compat_response(message, mode, history, rag_context, term_content)
 
     # ------------------------------------------------------------------ #
@@ -300,15 +315,18 @@ class AIChatService:
             "Gere agora o Termo de Referência final, completo e estruturado."
         )
 
-        response, _ = await cls._create_completion(
-            [
-                {"role": "system", "content": system_content},
-                {"role": "user", "content": user_content},
-            ],
-            max_tokens=3000,
-            temperature=0.3,
-        )
-        content = response.choices[0].message.content or ""
+        if settings.is_claude_mode:
+            content = await cls._anthropic_synthesize(system_content, user_content)
+        else:
+            response, _ = await cls._create_completion(
+                [
+                    {"role": "system", "content": system_content},
+                    {"role": "user", "content": user_content},
+                ],
+                max_tokens=3000,
+                temperature=0.3,
+            )
+            content = response.choices[0].message.content or ""
         from app.services.pdf_generator import clean_tr_content
         return clean_tr_content(content)
 
@@ -340,6 +358,11 @@ class AIChatService:
 
         if settings.is_gemini_mode:
             async for chunk in cls._gemini_stream(message, mode, history, rag_context, term_content):
+                yield chunk
+            return
+
+        if settings.is_claude_mode:
+            async for chunk in cls._anthropic_stream(message, mode, history, rag_context, term_content):
                 yield chunk
             return
 
@@ -591,6 +614,105 @@ class AIChatService:
         )
 
         return {"content": content, "term_complete": term_complete}
+
+    # ------------------------------------------------------------------ #
+    # Anthropic Claude
+    # ------------------------------------------------------------------ #
+
+    @classmethod
+    async def _anthropic_response(
+        cls,
+        message: str,
+        mode: str,
+        history: list[dict[str, str]],
+        rag_context: str,
+        term_content: str | None = None,
+    ) -> dict[str, Any]:
+        """Chama Claude via Anthropic SDK (não-streaming)."""
+        system_content = cls._build_system_content(mode, rag_context, term_content)
+        messages = [
+            {"role": m["role"], "content": m["content"]}
+            for m in history if m.get("role") in ("user", "assistant")
+        ]
+        messages.append({"role": "user", "content": message})
+
+        client = _get_anthropic_client()
+        logger.info("Claude request: model=%s mode=%s msgs=%d", settings.ANTHROPIC_MODEL, mode, len(messages))
+
+        try:
+            response = await client.messages.create(
+                model=settings.ANTHROPIC_MODEL,
+                max_tokens=2500,
+                temperature=0.4,
+                system=system_content,
+                messages=messages,
+            )
+        except Exception as e:
+            logger.error("Erro Claude: %s", str(e), exc_info=True)
+            raise AIProviderError(f"Erro ao chamar Claude: {e}") from e
+
+        content = response.content[0].text if response.content else ""
+        term_complete = cls._detect_term_complete(mode, content)
+        logger.info("Claude response: chars=%d term_complete=%s", len(content), term_complete)
+        return {"content": content, "term_complete": term_complete}
+
+    @classmethod
+    async def _anthropic_stream(
+        cls,
+        message: str,
+        mode: str,
+        history: list[dict[str, str]],
+        rag_context: str,
+        term_content: str | None = None,
+    ) -> AsyncGenerator[str, None]:
+        """Streaming via Anthropic SDK."""
+        import json
+
+        system_content = cls._build_system_content(mode, rag_context, term_content)
+        messages = [
+            {"role": m["role"], "content": m["content"]}
+            for m in history if m.get("role") in ("user", "assistant")
+        ]
+        messages.append({"role": "user", "content": message})
+
+        client = _get_anthropic_client()
+        logger.info("Claude stream: model=%s mode=%s msgs=%d", settings.ANTHROPIC_MODEL, mode, len(messages))
+
+        full_content = ""
+        try:
+            async with client.messages.stream(
+                model=settings.ANTHROPIC_MODEL,
+                max_tokens=2500,
+                temperature=0.4,
+                system=system_content,
+                messages=messages,
+            ) as stream:
+                async for text in stream.text_stream:
+                    full_content += text
+                    yield text
+        except Exception as e:
+            logger.error("Erro Claude stream: %s", str(e), exc_info=True)
+            raise AIProviderError(f"Erro ao chamar Claude: {e}") from e
+
+        term_complete = cls._detect_term_complete(mode, full_content)
+        yield json.dumps({"done": True, "term_complete": term_complete})
+
+    @classmethod
+    async def _anthropic_synthesize(cls, system_content: str, user_content: str) -> str:
+        """Gera TR final via Claude (usado em synthesize_tr)."""
+        client = _get_anthropic_client()
+        try:
+            response = await client.messages.create(
+                model=settings.ANTHROPIC_MODEL,
+                max_tokens=3000,
+                temperature=0.3,
+                system=system_content,
+                messages=[{"role": "user", "content": user_content}],
+            )
+            return response.content[0].text if response.content else ""
+        except Exception as e:
+            logger.error("Erro Claude synthesize: %s", str(e), exc_info=True)
+            raise AIProviderError(f"Erro ao chamar Claude: {e}") from e
 
     # ------------------------------------------------------------------ #
     # RAG

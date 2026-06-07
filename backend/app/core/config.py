@@ -49,6 +49,12 @@ class Settings(BaseSettings):
     OPENAI_MODEL: str = "gpt-4o-mini"
 
     # ------------------------------------------------------------------ #
+    # Inteligência Artificial — Anthropic Claude
+    # ------------------------------------------------------------------ #
+    ANTHROPIC_API_KEY: str = ""
+    ANTHROPIC_MODEL: str = "claude-3-5-haiku-20241022"
+
+    # ------------------------------------------------------------------ #
     # RAG / Banco Vetorial
     # ------------------------------------------------------------------ #
     RAG_ENABLED: bool = False   # True para usar RAG (requer ChromaDB rodando)
@@ -119,14 +125,27 @@ class Settings(BaseSettings):
     def is_mock_mode(self) -> bool:
         """Retorna True se nenhuma fonte de IA está configurada."""
         has_gemini = bool(self.GEMINI_API_KEY.strip())
+        has_anthropic = bool(self.ANTHROPIC_API_KEY.strip())
         has_ollama = bool(self.OLLAMA_BASE_URL.strip())
         has_openrouter = bool(self.OPENROUTER_API_KEY.strip())
         has_openai = bool(self.OPENAI_API_KEY.strip())
-        return not (has_gemini or has_ollama or has_openrouter or has_openai)
+        return not (has_gemini or has_anthropic or has_ollama or has_openrouter or has_openai)
+
+    @property
+    def is_claude_mode(self) -> bool:
+        """True se Claude (Anthropic) é o provider ativo. Claude tem prioridade sobre Gemini."""
+        return bool(self.ANTHROPIC_API_KEY.strip())
+
+    @property
+    def is_gemini_mode(self) -> bool:
+        """True se Gemini é o provider ativo (apenas quando Claude não está configurado)."""
+        return bool(self.GEMINI_API_KEY.strip()) and not bool(self.ANTHROPIC_API_KEY.strip())
 
     @property
     def active_api_key(self) -> str:
-        """Retorna a chave ativa. Gemini tem prioridade, Ollama não precisa de chave."""
+        """Retorna a chave ativa. Claude > Gemini > Ollama > OpenRouter > OpenAI."""
+        if self.ANTHROPIC_API_KEY.strip():
+            return self.ANTHROPIC_API_KEY.strip()
         if self.GEMINI_API_KEY.strip():
             return self.GEMINI_API_KEY.strip()
         if self.OLLAMA_BASE_URL.strip():
@@ -135,9 +154,11 @@ class Settings(BaseSettings):
 
     @property
     def active_base_url(self) -> str | None:
-        """Retorna a URL base. Gemini usa SDK próprio (não precisa de base_url)."""
+        """Retorna a URL base. Claude e Gemini usam SDKs próprios."""
+        if self.ANTHROPIC_API_KEY.strip():
+            return None
         if self.GEMINI_API_KEY.strip():
-            return None  # Gemini usa SDK próprio, não AsyncOpenAI
+            return None
         if self.OLLAMA_BASE_URL.strip():
             return self.OLLAMA_BASE_URL.strip()
         if self.OPENROUTER_API_KEY.strip():
@@ -146,7 +167,9 @@ class Settings(BaseSettings):
 
     @property
     def active_model(self) -> str:
-        """Retorna o modelo ativo: Gemini > Ollama > OpenRouter > OpenAI."""
+        """Retorna o modelo ativo: Claude > Gemini > Ollama > OpenRouter > OpenAI."""
+        if self.ANTHROPIC_API_KEY.strip():
+            return self.ANTHROPIC_MODEL
         if self.GEMINI_API_KEY.strip():
             return self.GEMINI_MODEL
         if self.OLLAMA_BASE_URL.strip():
@@ -156,13 +179,10 @@ class Settings(BaseSettings):
         return self.OPENAI_MODEL
 
     @property
-    def is_gemini_mode(self) -> bool:
-        """True se Gemini é o provider ativo."""
-        return bool(self.GEMINI_API_KEY.strip())
-
-    @property
     def active_provider_name(self) -> str:
         """Nome legível do provedor ativo para logs."""
+        if self.ANTHROPIC_API_KEY.strip():
+            return "Claude"
         if self.GEMINI_API_KEY.strip():
             return "Gemini"
         if self.OLLAMA_BASE_URL.strip():

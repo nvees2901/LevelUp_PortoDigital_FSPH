@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { Bot, Send, FileText, Paperclip, Minus, Plus, X, Sparkles, MessageSquareText } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
-import { sendChatMessage, finalizeChatSession, listChatSessions, getChatSession, uploadDocument, deleteChatSession } from '../../services/api';
+import { streamChatMessage, finalizeChatSession, listChatSessions, getChatSession, uploadDocument, deleteChatSession } from '../../services/api';
 import type { TelaId, MensagemChat, ChatMode, ChatSessionSummary } from '../../types';
 import { renderTexto } from '../../utils';
 
@@ -43,6 +43,9 @@ export default function ChatView({ navegar }: ChatViewProps) {
   const [attachedTermTitle, setAttachedTermTitle] = useState<string | null>(null);
   const [uploadingFile, setUploadingFile] = useState(false);
   const [hoveredSession, setHoveredSession] = useState<string | null>(null);
+
+  const [streamingText, setStreamingText] = useState('');
+  const streamingTextRef = useRef('');
 
   const endRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -136,17 +139,36 @@ export default function ChatView({ navegar }: ChatViewProps) {
     addMsg('user', txt);
     setInput('');
     setAnalisando(true);
+    streamingTextRef.current = '';
+    setStreamingText('');
+
     try {
-      const res = await sendChatMessage({
-        message: txt,
-        mode,
-        session_id: sessionId ?? undefined,
-        term_id: attachedTermId ?? undefined,
-      });
-      setSessionId(res.session_id);
-      addMsg('ia', res.message);
-      loadSessions(mode);
+      await streamChatMessage(
+        { message: txt, mode, session_id: sessionId ?? undefined, term_id: attachedTermId ?? undefined },
+        {
+          onToken: (token) => {
+            setAnalisando(false);
+            streamingTextRef.current += token;
+            setStreamingText(streamingTextRef.current);
+          },
+          onDone: (meta) => {
+            const finalText = streamingTextRef.current;
+            streamingTextRef.current = '';
+            setStreamingText('');
+            if (finalText) addMsg('ia', finalText);
+            setSessionId(meta.session_id);
+            loadSessions(mode);
+          },
+          onError: (err) => {
+            streamingTextRef.current = '';
+            setStreamingText('');
+            addMsg('ia', err.message || 'Não foi possível contactar o assistente.');
+          },
+        }
+      );
     } catch (err) {
+      streamingTextRef.current = '';
+      setStreamingText('');
       addMsg('ia', err instanceof Error ? err.message : 'Não foi possível contactar o assistente. Tente novamente.');
     } finally {
       setAnalisando(false);
@@ -307,7 +329,7 @@ export default function ChatView({ navegar }: ChatViewProps) {
             </div>
           ))}
 
-          {analisando && (
+          {analisando && !streamingText && (
             <div className="flex items-end gap-2 justify-start animate-fade-in">
               <div className="hidden sm:flex shrink-0 w-7 h-7 rounded-full bg-brand-primary text-white items-center justify-center mb-0.5">
                 <Bot size={15} />
@@ -323,6 +345,19 @@ export default function ChatView({ navegar }: ChatViewProps) {
               </div>
             </div>
           )}
+
+          {streamingText && (
+            <div className="flex items-end gap-2 justify-start animate-fade-in">
+              <div className="hidden sm:flex shrink-0 w-7 h-7 rounded-full bg-brand-primary text-white items-center justify-center mb-0.5">
+                <Bot size={15} />
+              </div>
+              <div className="max-w-[80%] sm:max-w-[78%] px-4 py-2.5 rounded-2xl rounded-bl-sm text-[13px] leading-relaxed shadow-card bg-white border border-slate-200 text-slate-700">
+                {renderMensagem(streamingText)}
+                <span className="inline-block w-0.5 h-3.5 bg-brand-primary ml-0.5 animate-pulse align-middle" />
+              </div>
+            </div>
+          )}
+
           <div ref={endRef} />
         </div>
 

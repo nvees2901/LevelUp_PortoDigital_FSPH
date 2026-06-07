@@ -34,6 +34,7 @@ dependencies = [
     # --- Utilitários ---
     "aiofiles>=24.0.0",     # leitura/escrita async de arquivos
     "anyio>=4.0.0",         # async I/O usado pelo context_loader
+    "anthropic>=0.30.0",   # Claude (Anthropic) provider
     "google-cloud-storage>=3.0.0",  # GCS storage
     # --- RAG / Banco Vetorial ---
     "chromadb>=0.6.0",                     # cliente HTTP para ChromaDB server (Docker)

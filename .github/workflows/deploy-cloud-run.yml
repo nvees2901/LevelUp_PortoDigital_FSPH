@@ -40,6 +40,7 @@ jobs:
           SECRET_KEY: ${{ secrets.SECRET_KEY }}
           GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         run: |
           gcloud run deploy ${{ secrets.CLOUD_RUN_SERVICE }} \
             --image "$IMAGE" \
@@ -52,7 +53,8 @@ jobs:
             --set-env-vars "DATABASE_URL=${DATABASE_URL}" \
             --set-env-vars "SECRET_KEY=${SECRET_KEY}" \
             --set-env-vars "GCS_BUCKET=${GCS_BUCKET}" \
-            --set-env-vars "GEMINI_API_KEY=${GEMINI_API_KEY}"
+            --set-env-vars "GEMINI_API_KEY=${GEMINI_API_KEY}" \
+            --set-env-vars "ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}"
 
       - name: (optional) Run migrations (see DEPLOY_BACKEND.md)
         run: echo "If you want automated migrations, enable Cloud Run jobs or run alembic manually in a one-off job."
