@@ -1,12 +1,13 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { Bot, Send, FileText, Paperclip, Minus, Plus, X, Sparkles, MessageSquareText } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
-import { streamChatMessage, finalizeChatSession, listChatSessions, getChatSession, uploadDocument, deleteChatSession } from '../../services/api';
+import { streamChatMessage, finalizeChatSession, listChatSessions, getChatSession, uploadDocument, deleteChatSession, getTerm } from '../../services/api';
 import type { TelaId, MensagemChat, ChatMode, ChatSessionSummary } from '../../types';
 import { renderTexto } from '../../utils';
 
 interface ChatViewProps {
   navegar: (tela: TelaId) => void;
+  initialTermId?: string | null;
 }
 
 function renderMensagem(txt: string) {
@@ -15,7 +16,7 @@ function renderMensagem(txt: string) {
   ));
 }
 
-export default function ChatView({ navegar }: ChatViewProps) {
+export default function ChatView({ navegar, initialTermId }: ChatViewProps) {
   const { usuario } = useAuth();
   const isDemandante = usuario?.id === 'demandante';
 
@@ -70,6 +71,21 @@ export default function ChatView({ navegar }: ChatViewProps) {
   }, []);
 
   useEffect(() => { loadSessions(mode); }, [mode, loadSessions]);
+
+  useEffect(() => {
+    if (!initialTermId) return;
+    setMode('analisar');
+    getTerm(initialTermId)
+      .then(term => {
+        setAttachedTermId(term.id);
+        setAttachedTermTitle(term.title);
+        addMsg('ia', `Processo "${term.title}" carregado. Faça perguntas ou peça ajustes.`);
+      })
+      .catch(() => {
+        addMsg('ia', 'Não foi possível carregar o processo. Tente novamente.');
+      });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialTermId]);
 
   const loadSession = async (sid: string) => {
     setLoadingSession(true);

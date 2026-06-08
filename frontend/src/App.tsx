@@ -67,7 +67,7 @@ function AppContent() {
       case 'detalhe':
         return <TermDetail termId={termoSelecionadoId} navegar={navegar} />;
       case 'chat':
-        return <ChatView navegar={navegar} />;
+        return <ChatView navegar={navegar} initialTermId={termoSelecionadoId} />;
       case 'analise':
         return <UploadView navegar={navegar} />;
       case 'admin':
