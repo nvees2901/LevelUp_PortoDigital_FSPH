@@ -78,15 +78,11 @@ async def list_terms(
 
 @router.get("/{term_id}", response_model=TermResponse)
 async def get_term(term_id: str, db: DbDep, current_user: CurrentUser):
-    """Busca um TR por ID (HU-03). Verifica se o usuário tem visibilidade."""
+    """Busca um TR por ID. Qualquer usuário autenticado pode visualizar.
+    Edição e exclusão são restritas por regras separadas."""
     term = await TermRepository.get_by_id(db, term_id)
     if not term:
         raise DocumentNotFoundError(term_id)
-    if not current_user.is_admin:
-        is_creator = str(term.created_by_id) == str(current_user.id)
-        is_setor = term.setor_atual == current_user.setor_id
-        if not is_creator and not is_setor:
-            raise HTTPException(status_code=403, detail="Você não tem acesso a este processo.")
     return TermResponse.model_validate(term)
 
 

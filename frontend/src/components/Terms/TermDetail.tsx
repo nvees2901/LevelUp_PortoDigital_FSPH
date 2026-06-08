@@ -192,6 +192,8 @@ export default function TermDetail({ termId, navegar }: TermDetailProps) {
   };
 
   const isDono = term.created_by_id === usuario.userId;
+  const isSetor = term.setor_atual === usuario.id;
+  const podeEditar = usuario.is_admin || isDono || isSetor;
   const podeExcluir = usuario.is_admin || (isDono && term.status === 'Rascunho');
 
   const CATEGORIAS: { v: string; l: string }[] = [
@@ -225,9 +227,11 @@ export default function TermDetail({ termId, navegar }: TermDetailProps) {
                 <span className={`badge mt-2 ${modalColor(term.category)}`}>{categoryLabel(term.category)}</span>
               </div>
               <div className="flex gap-2 shrink-0 flex-wrap justify-end">
-                <button onClick={abrirEdicao} className="btn btn-ghost btn-sm" title="Editar dados do processo">
-                  <Pencil size={14} /> Editar
-                </button>
+                {podeEditar && (
+                  <button onClick={abrirEdicao} className="btn btn-ghost btn-sm" title="Editar dados do processo">
+                    <Pencil size={14} /> Editar
+                  </button>
+                )}
                 <button onClick={() => setSignModal('pdf')} disabled={baixando !== null} className="btn btn-primary btn-sm" title="Gerar PDF">
                   <Download size={14} /> {baixando === 'pdf' ? '...' : 'PDF'}
                 </button>
