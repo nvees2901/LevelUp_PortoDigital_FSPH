@@ -23,6 +23,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.models.term import Term
+from app.models.user import User
 from app.utils.logging import get_logger
 
 logger = get_logger(__name__)
@@ -93,14 +94,21 @@ class TermRepository:
         query = select(Term).options(selectinload(Term.created_by))
         count_query = select(func.count(Term.id))
 
-        # --- Filtro de visibilidade por usuário/setor ---
-        if user_id and setor_id:
-            query = query.where(
-                or_(Term.created_by_id == user_id, Term.setor_atual == setor_id)
+        # --- Filtro de visibilidade por setor ---
+        # Mostra processos criados por QUALQUER pessoa do mesmo setor
+        # OU processos atualmente nesse setor.
+        if setor_id:
+            setor_users_sq = select(User.id).where(User.setor_id == setor_id).scalar_subquery()
+            visibility = or_(
+                Term.created_by_id.in_(setor_users_sq),
+                Term.setor_atual == setor_id,
             )
-            count_query = count_query.where(
-                or_(Term.created_by_id == user_id, Term.setor_atual == setor_id)
-            )
+            query = query.where(visibility)
+            count_query = count_query.where(visibility)
+        elif user_id:
+            # Fallback se o usuário não tiver setor: só os próprios
+            query = query.where(Term.created_by_id == user_id)
+            count_query = count_query.where(Term.created_by_id == user_id)
 
         # --- Filtros ---
         if category:
