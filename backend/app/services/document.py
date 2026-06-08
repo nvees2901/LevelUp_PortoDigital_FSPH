@@ -70,13 +70,14 @@ class DocumentService:
                     filename, extension, len(file_bytes))
 
         if extension == ".pdf":
-            return cls._extract_pdf(file_bytes, filename)
+            text = cls._extract_pdf(file_bytes, filename)
         elif extension == ".docx":
-            return cls._extract_docx(file_bytes, filename)
+            text = cls._extract_docx(file_bytes, filename)
         elif extension == ".doc":
-            return cls._extract_doc(file_bytes, filename)
+            text = cls._extract_doc(file_bytes, filename)
         else:
             raise UnsupportedFormatError(filename)
+        return cls._sanitize_text(text)
 
     @classmethod
     async def extract_text(cls, file_bytes: bytes, filename: str) -> str:
@@ -101,13 +102,14 @@ class DocumentService:
                     filename, extension, len(file_bytes))
 
         if extension == ".pdf":
-            return cls._extract_pdf(file_bytes, filename)
+            text = cls._extract_pdf(file_bytes, filename)
         elif extension == ".docx":
-            return cls._extract_docx(file_bytes, filename)
+            text = cls._extract_docx(file_bytes, filename)
         elif extension == ".doc":
-            return cls._extract_doc(file_bytes, filename)
+            text = cls._extract_doc(file_bytes, filename)
         else:
             raise UnsupportedFormatError(filename)
+        return cls._sanitize_text(text)
 
     # ------------------------------------------------------------------ #
     # Extratores por formato
@@ -381,7 +383,7 @@ class DocumentService:
             while i < len(data) - 1:
                 # UTF-16LE: char seguido de 0x00 para ASCII range
                 char_val = struct.unpack_from("<H", data, i)[0]
-                if 0x20 <= char_val < 0xFFFE:
+                if 0x20 <= char_val < 0xFFFE and not (0xD800 <= char_val <= 0xDFFF):
                     current.append(chr(char_val))
                 else:
                     if len(current) >= min_length:
@@ -404,6 +406,11 @@ class DocumentService:
     # ------------------------------------------------------------------ #
     # Utilitários
     # ------------------------------------------------------------------ #
+
+    @staticmethod
+    def _sanitize_text(text: str) -> str:
+        """Remove surrogates e caracteres inválidos que o PostgreSQL rejeita."""
+        return text.encode("utf-8", errors="ignore").decode("utf-8", errors="ignore")
 
     @staticmethod
     def _get_extension(filename: str) -> str:
