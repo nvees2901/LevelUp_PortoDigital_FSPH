@@ -43,6 +43,7 @@ export default function ChatView({ navegar }: ChatViewProps) {
   const [attachedTermTitle, setAttachedTermTitle] = useState<string | null>(null);
   const [uploadingFile, setUploadingFile] = useState(false);
   const [hoveredSession, setHoveredSession] = useState<string | null>(null);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
 
   const [streamingText, setStreamingText] = useState('');
   const streamingTextRef = useRef('');
@@ -95,14 +96,15 @@ export default function ChatView({ navegar }: ChatViewProps) {
     setAttachedTermTitle(null);
   };
 
-  const handleDeleteSession = async (e: React.MouseEvent, id: string) => {
-    e.stopPropagation();
+  const handleDeleteSession = async (id: string) => {
     try {
       await deleteChatSession(id);
       if (id === sessionId) novaSessao();
       setSessions(prev => prev.filter(s => s.id !== id));
     } catch {
       // ignora falha silenciosamente
+    } finally {
+      setConfirmDeleteId(null);
     }
   };
 
@@ -226,24 +228,44 @@ export default function ChatView({ navegar }: ChatViewProps) {
               key={s.id}
               className="relative"
               onMouseEnter={() => setHoveredSession(s.id)}
-              onMouseLeave={() => setHoveredSession(null)}
+              onMouseLeave={() => { setHoveredSession(null); }}
             >
-              <button onClick={() => loadSession(s.id)} disabled={loadingSession}
-                className={`w-full text-left px-3 py-2 pr-7 rounded-lg text-xs transition-colors disabled:opacity-60
-                  ${s.id === sessionId
-                    ? 'bg-brand-50 border border-brand-200 text-brand-primary font-semibold'
-                    : 'text-slate-600 border border-transparent hover:bg-slate-100'}`}>
-                <p className="truncate font-medium">{s.title ?? `Sessão ${s.id.slice(0, 8)}`}</p>
-                <p className="text-slate-400 text-[10px] mt-0.5">{s.message_count} msg • {s.updated_at.slice(0, 10)}</p>
-              </button>
-              {hoveredSession === s.id && (
-                <button
-                  onClick={(e) => handleDeleteSession(e, s.id)}
-                  className="absolute top-1/2 right-1.5 -translate-y-1/2 p-0.5 rounded text-slate-400 hover:text-red-500 hover:bg-red-50"
-                  title="Remover conversa"
-                >
-                  <Minus size={11} />
-                </button>
+              {confirmDeleteId === s.id ? (
+                <div className="flex items-center gap-1.5 px-2 py-2 rounded-lg bg-red-50 border border-red-200">
+                  <span className="text-[11px] text-red-600 font-medium flex-1 truncate">Remover conversa?</span>
+                  <button
+                    onClick={() => handleDeleteSession(s.id)}
+                    className="text-[11px] font-semibold text-white bg-red-500 hover:bg-red-600 px-2 py-0.5 rounded transition-colors"
+                  >
+                    Sim
+                  </button>
+                  <button
+                    onClick={() => setConfirmDeleteId(null)}
+                    className="text-[11px] font-medium text-slate-500 hover:text-slate-700 px-1.5 py-0.5 rounded hover:bg-slate-100 transition-colors"
+                  >
+                    Não
+                  </button>
+                </div>
+              ) : (
+                <>
+                  <button onClick={() => loadSession(s.id)} disabled={loadingSession}
+                    className={`w-full text-left px-3 py-2 pr-7 rounded-lg text-xs transition-colors disabled:opacity-60
+                      ${s.id === sessionId
+                        ? 'bg-brand-50 border border-brand-200 text-brand-primary font-semibold'
+                        : 'text-slate-600 border border-transparent hover:bg-slate-100'}`}>
+                    <p className="truncate font-medium">{s.title ?? `Sessão ${s.id.slice(0, 8)}`}</p>
+                    <p className="text-slate-400 text-[10px] mt-0.5">{s.message_count} msg • {s.updated_at.slice(0, 10)}</p>
+                  </button>
+                  {hoveredSession === s.id && (
+                    <button
+                      onClick={(e) => { e.stopPropagation(); setConfirmDeleteId(s.id); }}
+                      className="absolute top-1/2 right-1.5 -translate-y-1/2 p-0.5 rounded text-slate-400 hover:text-red-500 hover:bg-red-50"
+                      title="Remover conversa"
+                    >
+                      <Minus size={11} />
+                    </button>
+                  )}
+                </>
               )}
             </div>
           ))}

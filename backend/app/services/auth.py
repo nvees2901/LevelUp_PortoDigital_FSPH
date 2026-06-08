@@ -28,6 +28,7 @@ def create_access_token(user: User) -> str:
         "sub": str(user.id),
         "matricula": user.matricula,
         "setor_id": user.setor_id,
+        "tv": user.token_version,
         "exp": exp,
         "iat": now,
     }

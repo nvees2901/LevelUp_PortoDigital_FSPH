@@ -28,6 +28,8 @@ async def get_current_user(
         raise InvalidTokenError()
     if not user.ativo:
         raise InactiveUserError()
+    if claims.get("tv") != user.token_version:
+        raise InvalidTokenError()
     return user
 
 

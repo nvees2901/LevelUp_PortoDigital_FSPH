@@ -17,9 +17,11 @@ DbDep = Annotated[AsyncSession, Depends(get_db)]
 async def login(payload: LoginRequest, db: DbDep):
     """
     Autentica o usuário pelas credenciais (matrícula + senha).
+    Incrementa token_version para invalidar sessões anteriores (single-session).
     Retorna um JWT e os dados do usuário, incluindo o setor derivado do cadastro.
     """
     user = await authenticate_user(db, payload.matricula, payload.senha)
+    user.token_version += 1
     token = create_access_token(user)
     return LoginResponse(access_token=token, user=UserOut.model_validate(user))
 

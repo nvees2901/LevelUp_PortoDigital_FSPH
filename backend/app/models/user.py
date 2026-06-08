@@ -61,6 +61,12 @@ class User(Base):
         server_default=text("false"),
         comment="Papel administrativo — pode gerenciar documentos de contexto da IA",
     )
+    token_version: Mapped[int] = mapped_column(
+        nullable=False,
+        default=0,
+        server_default=text("0"),
+        comment="Versão da sessão ativa — incrementado a cada login para invalidar tokens antigos",
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         server_default=func.now(),
