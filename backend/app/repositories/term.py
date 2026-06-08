@@ -230,6 +230,7 @@ class TermRepository:
         # 5 mais recentes
         recent_result = await session.execute(
             select(Term)
+            .options(selectinload(Term.created_by))
             .order_by(Term.created_at.desc())
             .limit(5)
         )
