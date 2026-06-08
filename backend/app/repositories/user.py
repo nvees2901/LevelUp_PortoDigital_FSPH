@@ -37,5 +37,5 @@ class UserRepository:
 
     @staticmethod
     async def delete(session: AsyncSession, user: User) -> None:
-        await session.delete(user)
+        session.delete(user)
         await session.flush()

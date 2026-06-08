@@ -51,7 +51,7 @@ function AppContent() {
 
   const navegar = useCallback((tela: TelaId, termoId?: string) => {
     setTelaAtual(tela);
-    if (termoId) setTermoSelecionadoId(termoId);
+    setTermoSelecionadoId(termoId ?? null);
   }, []);
 
   if (!usuario) {

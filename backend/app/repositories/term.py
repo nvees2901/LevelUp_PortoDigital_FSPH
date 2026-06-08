@@ -194,7 +194,7 @@ class TermRepository:
         if term is None:
             return False
 
-        await session.delete(term)
+        session.delete(term)
         await session.flush()
         logger.info("TR removido: id=%s", term_id)
         return True
