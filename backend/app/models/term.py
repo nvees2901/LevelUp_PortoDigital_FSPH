@@ -224,6 +224,13 @@ class Term(Base):
     # ------------------------------------------------------------------ #
 
     @property
+    def created_by_name(self) -> str | None:
+        """Nome do usuário que criou o TR (requer created_by carregado)."""
+        if self.created_by is not None:
+            return self.created_by.nome
+        return None
+
+    @property
     def title_normalized(self) -> str:
         """
         Título sem acentos e em minúsculas para busca textual.

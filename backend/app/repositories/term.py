@@ -20,6 +20,7 @@ from decimal import Decimal
 
 from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.models.term import Term
 from app.utils.logging import get_logger
@@ -60,7 +61,7 @@ class TermRepository:
     async def get_by_id(session: AsyncSession, term_id: str) -> Term | None:
         """Busca um TR pelo UUID. Retorna None se não existir."""
         result = await session.execute(
-            select(Term).where(Term.id == term_id)
+            select(Term).options(selectinload(Term.created_by)).where(Term.id == term_id)
         )
         return result.scalar_one_or_none()
 
@@ -73,6 +74,8 @@ class TermRepository:
         search: str | None = None,
         page: int = 1,
         limit: int = 10,
+        user_id: str | None = None,
+        setor_id: str | None = None,
     ) -> tuple[list[Term], int]:
         """
         Lista TRs com filtros opcionais e paginação.
@@ -87,8 +90,17 @@ class TermRepository:
           Normalizamos o texto de busca e comparamos com o title em minúsculas.
           Ex: busca "aquisicao" encontra "Aquisição de TI".
         """
-        query = select(Term)
+        query = select(Term).options(selectinload(Term.created_by))
         count_query = select(func.count(Term.id))
+
+        # --- Filtro de visibilidade por usuário/setor ---
+        if user_id and setor_id:
+            query = query.where(
+                or_(Term.created_by_id == user_id, Term.setor_atual == setor_id)
+            )
+            count_query = count_query.where(
+                or_(Term.created_by_id == user_id, Term.setor_atual == setor_id)
+            )
 
         # --- Filtros ---
         if category:

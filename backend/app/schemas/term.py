@@ -145,6 +145,7 @@ class TermResponse(BaseModel):
     status: str
     setor_atual: str
     created_by_id: str | None = None
+    created_by_name: str | None = None
     content: str | None = None
     sections: dict[str, Any] | None = None
     variable_fields: list[str] | None = None
@@ -185,6 +186,7 @@ class TermSummary(BaseModel):
     category: str
     status: str
     setor_atual: str
+    created_by_name: str | None = None
     estimated_value: Decimal | None = None
     original_filename: str | None = None
     created_at: str

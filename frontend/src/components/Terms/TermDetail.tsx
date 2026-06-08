@@ -254,10 +254,11 @@ export default function TermDetail({ termId, navegar }: TermDetailProps) {
             </div>
 
             {/* Meta */}
-            <div className="grid grid-cols-2 md:grid-cols-3 gap-3 p-3.5 bg-slate-50 rounded-lg text-xs mb-6 border border-slate-100">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 p-3.5 bg-slate-50 rounded-lg text-xs mb-6 border border-slate-100">
               {[
                 { l: 'Categoria', v: categoryLabel(term.category) },
                 { l: 'Valor Estimado', v: formatCurrency(term.estimated_value) },
+                { l: 'Criado por', v: term.created_by_name ?? '—' },
                 { l: 'Criado em', v: formatDate(term.created_at) },
               ].map(item => (
                 <div key={item.l}>

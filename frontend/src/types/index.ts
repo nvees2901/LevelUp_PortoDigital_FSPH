@@ -63,6 +63,7 @@ export interface TermResponse {
   status: TermStatus;
   setor_atual: SetorId;
   created_by_id: string | null;
+  created_by_name: string | null;
   content: string | null;
   sections: Record<string, unknown> | null;
   variable_fields: string[] | null;
@@ -78,6 +79,7 @@ export interface TermSummary {
   category: string;
   status: TermStatus;
   setor_atual: SetorId;
+  created_by_name: string | null;
   estimated_value: number | null;
   original_filename: string | null;
   created_at: string;

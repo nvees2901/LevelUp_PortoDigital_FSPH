@@ -47,6 +47,7 @@ async def create_term(payload: TermCreate, db: DbDep, current_user: CurrentUser)
 @router.get("", response_model=TermListResponse)
 async def list_terms(
     db: DbDep,
+    current_user: CurrentUser,
     page: int = Query(1, ge=1, description="Número da página"),
     limit: int = Query(10, ge=1, le=100, description="Itens por página"),
     category: str | None = Query(None, description="Filtrar por categoria"),
@@ -55,13 +56,15 @@ async def list_terms(
 ):
     """
     Lista TRs com filtros opcionais e paginação (HU-03, HU-04).
-
-    Exemplos:
-      GET /api/v1/terms?category=aquisicao&search=equipamento&page=1&limit=10
+    Admin vê todos. Demais usuários veem apenas os que criaram
+    ou que estão atualmente no seu setor.
     """
+    user_id = None if current_user.is_admin else str(current_user.id)
+    setor_id = None if current_user.is_admin else current_user.setor_id
     terms, total = await TermRepository.list(
         db, category=category, status=status, search=search,
         page=page, limit=limit,
+        user_id=user_id, setor_id=setor_id,
     )
     pages = math.ceil(total / limit) if total > 0 else 0
     return TermListResponse(
@@ -74,11 +77,16 @@ async def list_terms(
 
 
 @router.get("/{term_id}", response_model=TermResponse)
-async def get_term(term_id: str, db: DbDep):
-    """Busca um TR por ID (HU-03)."""
+async def get_term(term_id: str, db: DbDep, current_user: CurrentUser):
+    """Busca um TR por ID (HU-03). Verifica se o usuário tem visibilidade."""
     term = await TermRepository.get_by_id(db, term_id)
     if not term:
         raise DocumentNotFoundError(term_id)
+    if not current_user.is_admin:
+        is_creator = str(term.created_by_id) == str(current_user.id)
+        is_setor = term.setor_atual == current_user.setor_id
+        if not is_creator and not is_setor:
+            raise HTTPException(status_code=403, detail="Você não tem acesso a este processo.")
     return TermResponse.model_validate(term)
 
 

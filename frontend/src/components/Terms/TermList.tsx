@@ -126,8 +126,8 @@ export default function TermList({ navegar }: TermListProps) {
             <table className="w-full text-left">
               <thead>
                 <tr className="border-b border-slate-200 bg-white text-xs uppercase tracking-wider text-slate-500">
-                  {['Processo / Objeto', 'Categoria', 'Valor Estimado', 'Ação'].map((h, i) => (
-                    <th key={h} className={`px-5 py-3.5 font-semibold ${i === 3 ? 'text-right' : ''}`}>{h}</th>
+                  {['Processo / Objeto', 'Categoria', 'Criado por', 'Valor Estimado', 'Ação'].map((h, i) => (
+                    <th key={h} className={`px-5 py-3.5 font-semibold ${i === 4 ? 'text-right' : ''}`}>{h}</th>
                   ))}
                 </tr>
               </thead>
@@ -147,6 +147,9 @@ export default function TermList({ navegar }: TermListProps) {
                       <span className={`badge ${modalColor(term.category)}`}>
                         {categoryLabel(term.category)}
                       </span>
+                    </td>
+                    <td className="px-5 py-4 text-sm text-slate-600">
+                      {term.created_by_name ?? <span className="text-slate-300">—</span>}
                     </td>
                     <td className="px-5 py-4 text-sm font-medium text-slate-700">
                       {formatCurrency(term.estimated_value)}
