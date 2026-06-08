@@ -321,7 +321,7 @@ export default function TermDetail({ termId, navegar }: TermDetailProps) {
                   <button onClick={handleAnalisarIA} disabled={analyzingIA} className="btn btn-primary btn-sm w-full">
                     <Bot size={14} /> {analyzingIA ? 'Analisando...' : 'Solicitar Análise IA'}
                   </button>
-                  {latestAnalysis && conf.label !== 'Em conformidade' && (
+                  {latestAnalysis && (
                     <button onClick={() => navegar('chat', termId)} className="btn btn-secondary btn-sm w-full mt-2">
                       <MessageSquare size={14} /> Ajustar no Chat IA
                     </button>
