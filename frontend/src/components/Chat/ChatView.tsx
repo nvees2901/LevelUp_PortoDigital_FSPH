@@ -264,15 +264,36 @@ export default function ChatView({ navegar, initialTermId }: ChatViewProps) {
 
           {/* Modal body */}
           <div className="overflow-y-auto p-5">
-            {attachedTermContent ? (
-              <pre className="text-xs text-slate-600 whitespace-pre-wrap font-sans leading-relaxed">
-                {attachedTermContent}
-              </pre>
-            ) : (
-              <p className="text-sm text-slate-400 text-center py-10">
-                Conteúdo não disponível para visualização.
-              </p>
-            )}
+            {(() => {
+              if (!attachedTermContent) {
+                return (
+                  <p className="text-sm text-slate-400 text-center py-10">
+                    Conteúdo não disponível para visualização.
+                  </p>
+                );
+              }
+              // Detecta conteúdo garbled: menos de 40% de chars Latin/ASCII
+              const sample = attachedTermContent.slice(0, 400);
+              const latinRatio = [...sample].filter(c => c.charCodeAt(0) < 256).length / sample.length;
+              if (latinRatio < 0.4) {
+                return (
+                  <div className="text-center py-10 space-y-2">
+                    <p className="text-sm font-semibold text-slate-600">
+                      Não foi possível exibir o conteúdo.
+                    </p>
+                    <p className="text-xs text-slate-400 max-w-xs mx-auto">
+                      O formato deste arquivo não permitiu extração de texto legível.
+                      Faça o upload novamente em formato <strong>.pdf</strong> para melhor compatibilidade.
+                    </p>
+                  </div>
+                );
+              }
+              return (
+                <pre className="text-xs text-slate-600 whitespace-pre-wrap font-sans leading-relaxed">
+                  {attachedTermContent}
+                </pre>
+              );
+            })()}
           </div>
         </div>
       </div>

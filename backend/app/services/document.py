@@ -409,8 +409,27 @@ class DocumentService:
 
     @staticmethod
     def _sanitize_text(text: str) -> str:
-        """Remove surrogates e caracteres inválidos que o PostgreSQL rejeita."""
-        return text.encode("utf-8", errors="ignore").decode("utf-8", errors="ignore")
+        """Remove surrogates, caracteres inválidos e linhas de lixo binário.
+
+        Documentos Word antigos embutem objetos OLE cujo conteúdo binário
+        acaba sendo interpretado como texto (ex: CJK, Korean). Filtramos
+        linhas onde menos de 40 % dos caracteres são Latin/ASCII — para
+        documentos em português isso elimina exclusivamente o lixo binário.
+        """
+        # 1. Remove surrogates inválidos para o PostgreSQL
+        text = text.encode("utf-8", errors="ignore").decode("utf-8", errors="ignore")
+
+        # 2. Filtra linhas que são majoritariamente não-latinas (lixo binário)
+        clean: list[str] = []
+        for line in text.split("\n"):
+            if not line.strip():
+                clean.append(line)
+                continue
+            latin = sum(1 for c in line if ord(c) < 256)
+            if latin / len(line) >= 0.40:
+                clean.append(line)
+
+        return "\n".join(clean)
 
     @staticmethod
     def _get_extension(filename: str) -> str:
