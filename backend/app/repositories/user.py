@@ -1,4 +1,4 @@
-from sqlalchemy import select
+from sqlalchemy import delete as sa_delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.user import User
@@ -37,5 +37,5 @@ class UserRepository:
 
     @staticmethod
     async def delete(session: AsyncSession, user: User) -> None:
-        session.delete(user)
+        await session.execute(sa_delete(User).where(User.id == user.id))
         await session.flush()
