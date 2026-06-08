@@ -165,16 +165,22 @@ class IngestionService:
     @staticmethod
     def _extract_title(text: str, filename: str) -> str:
         """
-        Tenta extrair o título do documento a partir do texto.
-        Fallback: usa o nome do arquivo sem extensão.
+        Retorna o título do TR.
+        Preferência: nome do arquivo (sempre legível).
+        Fallback: primeira linha do texto que não pareça lixo binário.
         """
-        # Tenta as primeiras linhas não-vazias como título
-        lines = [line.strip() for line in text.split("\n") if line.strip()]
-        if lines:
-            # Primeira linha com tamanho razoável para um título
-            for line in lines[:5]:
-                if 10 <= len(line) <= 300:
+        # Primary: nome do arquivo sem extensão — previsível e sempre legível
+        name_without_ext = filename.rsplit(".", 1)[0] if "." in filename else filename
+        clean = name_without_ext.replace("_", " ").replace("-", " ").strip()
+        if len(clean) >= 5:
+            return clean[:300]
+
+        # Fallback: primeira linha do texto com ≥10 chars e maioria de chars
+        # Latin/ASCII (ord<256) — rejeita texto garbled (CJK, Korean etc.)
+        for line in (l.strip() for l in text.split("\n") if l.strip()):
+            if 10 <= len(line) <= 300:
+                latin_ratio = sum(ord(c) < 256 for c in line) / len(line)
+                if latin_ratio > 0.5:
                     return line[:300]
 
-        # Fallback: nome do arquivo sem extensão
-        return filename.rsplit(".", 1)[0].replace("_", " ").replace("-", " ").title()
+        return clean or "Documento"
