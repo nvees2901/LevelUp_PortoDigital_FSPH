@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import {
   ArrowLeft, CheckCircle, Download, Bot, AlertTriangle,
-  ShieldCheck, ShieldAlert, ShieldX, FileText, MessageSquare, Pencil,
+  ShieldCheck, ShieldAlert, ShieldX, FileText, MessageSquare, Pencil, Trash2,
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { modalColor, categoryLabel } from '../../constants';
@@ -13,6 +13,7 @@ import {
   exportTermPdf,
   exportTermDocx,
   updateTerm,
+  deleteTerm,
 } from '../../services/api';
 import type {
   TermResponse,
@@ -54,6 +55,8 @@ export default function TermDetail({ termId, navegar }: TermDetailProps) {
   const [editStatus, setEditStatus] = useState('Rascunho');
   const [editContent, setEditContent] = useState('');
   const [salvando, setSalvando] = useState(false);
+  const [confirmExcluir, setConfirmExcluir] = useState(false);
+  const [excluindo, setExcluindo] = useState(false);
 
   const loadData = useCallback(async () => {
     if (!termId) return;
@@ -176,6 +179,20 @@ export default function TermDetail({ termId, navegar }: TermDetailProps) {
     }
   };
 
+  const handleExcluir = async () => {
+    setExcluindo(true);
+    try {
+      await deleteTerm(termId);
+      navegar('lista');
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Erro ao excluir processo.');
+      setExcluindo(false);
+      setConfirmExcluir(false);
+    }
+  };
+
+  const podeExcluir = usuario.is_admin || term.status === 'Rascunho';
+
   const CATEGORIAS: { v: string; l: string }[] = [
     { v: 'capacitacao', l: 'Capacitação' },
     { v: 'aquisicao', l: 'Aquisição' },
@@ -206,7 +223,7 @@ export default function TermDetail({ termId, navegar }: TermDetailProps) {
                 <h1 className="text-xl font-black text-brand-primary leading-tight">{term.title}</h1>
                 <span className={`badge mt-2 ${modalColor(term.category)}`}>{categoryLabel(term.category)}</span>
               </div>
-              <div className="flex gap-2 shrink-0">
+              <div className="flex gap-2 shrink-0 flex-wrap justify-end">
                 <button onClick={abrirEdicao} className="btn btn-ghost btn-sm" title="Editar dados do processo">
                   <Pencil size={14} /> Editar
                 </button>
@@ -216,6 +233,22 @@ export default function TermDetail({ termId, navegar }: TermDetailProps) {
                 <button onClick={() => setSignModal('docx')} disabled={baixando !== null} className="btn btn-secondary btn-sm" title="Gerar DOCX (Word)">
                   <FileText size={14} /> {baixando === 'docx' ? '...' : 'DOCX'}
                 </button>
+                {podeExcluir && !confirmExcluir && (
+                  <button onClick={() => setConfirmExcluir(true)} className="btn btn-sm border border-red-200 text-red-500 hover:bg-red-50" title="Excluir processo">
+                    <Trash2 size={14} /> Excluir
+                  </button>
+                )}
+                {podeExcluir && confirmExcluir && (
+                  <div className="flex items-center gap-1.5 bg-red-50 border border-red-200 rounded-lg px-3 py-1.5">
+                    <span className="text-xs text-red-600 font-medium">Confirmar exclusão?</span>
+                    <button onClick={handleExcluir} disabled={excluindo} className="text-xs font-bold text-white bg-red-500 hover:bg-red-600 px-2 py-0.5 rounded">
+                      {excluindo ? '...' : 'Sim'}
+                    </button>
+                    <button onClick={() => setConfirmExcluir(false)} className="text-xs text-slate-500 hover:text-slate-700 px-2 py-0.5">
+                      Não
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
 
