@@ -33,7 +33,7 @@ export default function ChatView({ navegar, initialTermId }: ChatViewProps) {
   const [input, setInput] = useState('');
   const [analisando, setAnalisando] = useState(false);
   const [sessionId, setSessionId] = useState<string | null>(null);
-  const [mode, setMode] = useState<ChatMode>('consultar');
+  const [mode, setMode] = useState<ChatMode>(initialTermId ? 'analisar' : 'consultar');
   const [finalizing, setFinalizing] = useState(false);
 
   const [sessions, setSessions] = useState<ChatSessionSummary[]>([]);
@@ -74,16 +74,27 @@ export default function ChatView({ navegar, initialTermId }: ChatViewProps) {
 
   useEffect(() => {
     if (!initialTermId) return;
-    setMode('analisar');
-    getTerm(initialTermId)
-      .then(term => {
+    const run = async () => {
+      try {
+        const [sessionsRes, term] = await Promise.all([
+          listChatSessions('analisar'),
+          getTerm(initialTermId),
+        ]);
+        setSessions(sessionsRes.items);
+        const existing = sessionsRes.items.find(s => s.term_id === initialTermId);
+        if (existing) {
+          await loadSession(existing.id);
+        } else {
+          addMsg('ia', `Processo "${term.title}" carregado. Faça perguntas ou peça ajustes.`);
+        }
+        // Restaura o chip de anexo (loadSession zera; nova sessão ainda não tem)
         setAttachedTermId(term.id);
         setAttachedTermTitle(term.title);
-        addMsg('ia', `Processo "${term.title}" carregado. Faça perguntas ou peça ajustes.`);
-      })
-      .catch(() => {
+      } catch {
         addMsg('ia', 'Não foi possível carregar o processo. Tente novamente.');
-      });
+      }
+    };
+    run();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialTermId]);
 
