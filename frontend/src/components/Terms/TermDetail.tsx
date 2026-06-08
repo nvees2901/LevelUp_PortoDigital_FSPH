@@ -191,7 +191,8 @@ export default function TermDetail({ termId, navegar }: TermDetailProps) {
     }
   };
 
-  const podeExcluir = usuario.is_admin || term.status === 'Rascunho';
+  const isDono = term.created_by_id === usuario.userId;
+  const podeExcluir = usuario.is_admin || (isDono && term.status === 'Rascunho');
 
   const CATEGORIAS: { v: string; l: string }[] = [
     { v: 'capacitacao', l: 'Capacitação' },

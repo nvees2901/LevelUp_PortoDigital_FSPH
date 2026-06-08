@@ -13,7 +13,7 @@ Endpoints:
 import math
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -93,11 +93,28 @@ async def update_term(term_id: str, payload: TermUpdate, db: DbDep):
 
 
 @router.delete("/{term_id}", status_code=204)
-async def delete_term(term_id: str, db: DbDep):
-    """Remove um TR e suas análises associadas (CASCADE)."""
-    deleted = await TermRepository.delete(db, term_id)
-    if not deleted:
+async def delete_term(term_id: str, db: DbDep, current_user: CurrentUser):
+    """Remove um TR e suas análises associadas (CASCADE).
+
+    Regras:
+      - Admin pode deletar qualquer processo em qualquer status.
+      - Demais usuários só podem deletar um processo que criaram E que ainda
+        está em Rascunho (não avançou no fluxo).
+    """
+    term = await TermRepository.get_by_id(db, term_id)
+    if term is None:
         raise DocumentNotFoundError(term_id)
+
+    is_owner = str(term.created_by_id) == str(current_user.id)
+    is_rascunho = term.status == "Rascunho"
+
+    if not current_user.is_admin:
+        if not is_owner:
+            raise HTTPException(status_code=403, detail="Você não tem permissão para excluir este processo.")
+        if not is_rascunho:
+            raise HTTPException(status_code=403, detail="Só é possível excluir processos em Rascunho.")
+
+    await TermRepository.delete(db, term_id)
 
 
 _SETOR_LABELS = {

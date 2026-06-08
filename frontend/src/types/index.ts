@@ -18,6 +18,7 @@ export interface FluxoConfig {
 
 export interface UsuarioAtual {
   id: SetorId;
+  userId: string;
   nome: string;
   icon: ComponentType<{ size?: number; className?: string }>;
   descricao: string;
@@ -61,6 +62,7 @@ export interface TermResponse {
   category: 'capacitacao' | 'aquisicao' | 'servico_tecnico' | 'outro';
   status: TermStatus;
   setor_atual: SetorId;
+  created_by_id: string | null;
   content: string | null;
   sections: Record<string, unknown> | null;
   variable_fields: string[] | null;

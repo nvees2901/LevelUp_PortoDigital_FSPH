@@ -20,6 +20,7 @@ function deriveUsuario(userOut: UserOut): UsuarioAtual | null {
   if (!setor) return null;
   return {
     id: userOut.setor_id,
+    userId: userOut.id,
     nome: setor.nome,
     icon: setor.icon,
     descricao: setor.descricao,
