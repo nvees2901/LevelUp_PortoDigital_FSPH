@@ -25,7 +25,7 @@ function Badge({ ativo }: { ativo: boolean }) {
 interface ModalProps {
   user?: UserAdminOut | null;
   onClose: () => void;
-  onSaved: () => void;
+  onSaved: () => Promise<void>;
 }
 
 function UserModal({ user, onClose, onSaved }: ModalProps) {
@@ -74,7 +74,7 @@ function UserModal({ user, onClose, onSaved }: ModalProps) {
         };
         await createUser(payload);
       }
-      onSaved();
+      await onSaved();
       onClose();
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Erro ao salvar usuário.';
@@ -251,7 +251,7 @@ function UserModal({ user, onClose, onSaved }: ModalProps) {
                         setDeleting(true);
                         try {
                           await deleteUserPermanently(user.id);
-                          onSaved();
+                          await onSaved();
                           onClose();
                         } catch {
                           setError('Erro ao excluir usuário.');
@@ -285,7 +285,8 @@ export default function UsersView({ navegar: _navegar }: UsersViewProps) {
   const fetchUsers = useCallback(async () => {
     setLoading(true);
     try {
-      setUsers(await listUsers());
+      const data = await listUsers();
+      setUsers(data);
     } finally {
       setLoading(false);
     }
