@@ -226,18 +226,25 @@ export default function TermDetail({ termId, navegar }: TermDetailProps) {
                 <h1 className="text-xl font-black text-brand-primary leading-tight">{term.title}</h1>
                 <span className={`badge mt-2 ${modalColor(term.category)}`}>{categoryLabel(term.category)}</span>
               </div>
-              <div className="flex gap-2 shrink-0 flex-wrap justify-end">
+              <div className="flex gap-2 shrink-0 flex-wrap justify-end items-center">
+                {!podeEditar && (
+                  <span className="badge badge-slate text-[11px] px-2.5 py-1">Somente visualização</span>
+                )}
                 {podeEditar && (
                   <button onClick={abrirEdicao} className="btn btn-ghost btn-sm" title="Editar dados do processo">
                     <Pencil size={14} /> Editar
                   </button>
                 )}
-                <button onClick={() => setSignModal('pdf')} disabled={baixando !== null} className="btn btn-primary btn-sm" title="Gerar PDF">
-                  <Download size={14} /> {baixando === 'pdf' ? '...' : 'PDF'}
-                </button>
-                <button onClick={() => setSignModal('docx')} disabled={baixando !== null} className="btn btn-secondary btn-sm" title="Gerar DOCX (Word)">
-                  <FileText size={14} /> {baixando === 'docx' ? '...' : 'DOCX'}
-                </button>
+                {podeEditar && (
+                  <button onClick={() => setSignModal('pdf')} disabled={baixando !== null} className="btn btn-primary btn-sm" title="Gerar PDF">
+                    <Download size={14} /> {baixando === 'pdf' ? '...' : 'PDF'}
+                  </button>
+                )}
+                {podeEditar && (
+                  <button onClick={() => setSignModal('docx')} disabled={baixando !== null} className="btn btn-secondary btn-sm" title="Gerar DOCX (Word)">
+                    <FileText size={14} /> {baixando === 'docx' ? '...' : 'DOCX'}
+                  </button>
+                )}
                 {podeExcluir && !confirmExcluir && (
                   <button onClick={() => setConfirmExcluir(true)} className="btn btn-sm border border-red-200 text-red-500 hover:bg-red-50" title="Excluir processo">
                     <Trash2 size={14} /> Excluir
@@ -309,15 +316,21 @@ export default function TermDetail({ termId, navegar }: TermDetailProps) {
                 <p className="text-xs text-slate-400 mb-4">Documento ainda não analisado pela IA.</p>
               )}
 
-              <button onClick={handleAnalisarIA} disabled={analyzingIA} className="btn btn-primary btn-sm w-full">
-                <Bot size={14} /> {analyzingIA ? 'Analisando...' : 'Solicitar Análise IA'}
-              </button>
-
-              {/* Quando há pontos a corrigir, leva ao Chat IA para ajustar */}
-              {latestAnalysis && conf.label !== 'Em conformidade' && (
-                <button onClick={() => navegar('chat', termId)} className="btn btn-secondary btn-sm w-full mt-2">
-                  <MessageSquare size={14} /> Ajustar no Chat IA
-                </button>
+              {podeEditar ? (
+                <>
+                  <button onClick={handleAnalisarIA} disabled={analyzingIA} className="btn btn-primary btn-sm w-full">
+                    <Bot size={14} /> {analyzingIA ? 'Analisando...' : 'Solicitar Análise IA'}
+                  </button>
+                  {latestAnalysis && conf.label !== 'Em conformidade' && (
+                    <button onClick={() => navegar('chat', termId)} className="btn btn-secondary btn-sm w-full mt-2">
+                      <MessageSquare size={14} /> Ajustar no Chat IA
+                    </button>
+                  )}
+                </>
+              ) : (
+                <p className="text-xs text-slate-400 text-center py-1">
+                  Sem permissão para solicitar análise.
+                </p>
               )}
             </div>
           </div>
