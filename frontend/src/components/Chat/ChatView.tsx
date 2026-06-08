@@ -42,6 +42,8 @@ export default function ChatView({ navegar, initialTermId }: ChatViewProps) {
   const [loadingSession, setLoadingSession] = useState(false);
   const [attachedTermId, setAttachedTermId] = useState<string | null>(null);
   const [attachedTermTitle, setAttachedTermTitle] = useState<string | null>(null);
+  const [attachedTermContent, setAttachedTermContent] = useState<string | null>(null);
+  const [showPreview, setShowPreview] = useState(false);
   const [uploadingFile, setUploadingFile] = useState(false);
   const [hoveredSession, setHoveredSession] = useState<string | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
@@ -90,6 +92,7 @@ export default function ChatView({ navegar, initialTermId }: ChatViewProps) {
         // Restaura o chip de anexo (loadSession zera; nova sessão ainda não tem)
         setAttachedTermId(term.id);
         setAttachedTermTitle(term.title);
+        setAttachedTermContent(term.content ?? null);
       } catch {
         addMsg('ia', 'Não foi possível carregar o processo. Tente novamente.');
       }
@@ -109,6 +112,7 @@ export default function ChatView({ navegar, initialTermId }: ChatViewProps) {
       );
       setAttachedTermId(null);
       setAttachedTermTitle(null);
+      setAttachedTermContent(null);
     } catch {
       addMsg('ia', 'Não foi possível carregar a sessão.');
     } finally {
@@ -121,6 +125,7 @@ export default function ChatView({ navegar, initialTermId }: ChatViewProps) {
     setMsgs([buildWelcome()]);
     setAttachedTermId(null);
     setAttachedTermTitle(null);
+    setAttachedTermContent(null);
   };
 
   const handleDeleteSession = async (id: string) => {
@@ -141,6 +146,7 @@ export default function ChatView({ navegar, initialTermId }: ChatViewProps) {
     setMsgs([buildWelcome()]);
     setAttachedTermId(null);
     setAttachedTermTitle(null);
+    setAttachedTermContent(null);
   };
 
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -153,6 +159,7 @@ export default function ChatView({ navegar, initialTermId }: ChatViewProps) {
       const { term } = await uploadDocument(file);
       setAttachedTermId(term.id);
       setAttachedTermTitle(term.title);
+      setAttachedTermContent(term.content ?? null);
       addMsg('ia', `TR "${term.title}" carregado. Pode fazer perguntas sobre ele agora.`);
     } catch (err) {
       addMsg('ia', `Erro ao carregar arquivo: ${err instanceof Error ? err.message : 'tente novamente'}`);
@@ -224,6 +231,53 @@ export default function ChatView({ navegar, initialTermId }: ChatViewProps) {
   ];
 
   return (
+    <>
+    {/* Preview Modal */}
+    {showPreview && (
+      <div
+        className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4"
+        onClick={() => setShowPreview(false)}
+      >
+        <div
+          className="bg-white rounded-2xl shadow-xl flex flex-col w-full max-w-2xl"
+          style={{ maxHeight: '80vh' }}
+          onClick={e => e.stopPropagation()}
+        >
+          {/* Modal header */}
+          <div className="flex items-center gap-3 px-5 py-4 border-b border-slate-200 shrink-0">
+            <FileText size={16} className="text-brand-primary shrink-0" />
+            <span
+              className="font-semibold text-sm text-slate-700 flex-1 min-w-0"
+              title={attachedTermTitle ?? undefined}
+              style={{ overflowWrap: 'anywhere' }}
+            >
+              {attachedTermTitle ?? attachedTermId}
+            </span>
+            <button
+              onClick={() => setShowPreview(false)}
+              className="shrink-0 p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors"
+              aria-label="Fechar visualização"
+            >
+              <X size={18} />
+            </button>
+          </div>
+
+          {/* Modal body */}
+          <div className="overflow-y-auto p-5">
+            {attachedTermContent ? (
+              <pre className="text-xs text-slate-600 whitespace-pre-wrap font-sans leading-relaxed">
+                {attachedTermContent}
+              </pre>
+            ) : (
+              <p className="text-sm text-slate-400 text-center py-10">
+                Conteúdo não disponível para visualização.
+              </p>
+            )}
+          </div>
+        </div>
+      </div>
+    )}
+
     <div className="max-w-4xl mx-auto flex card overflow-hidden shadow-card-md animate-fade-in"
       style={{ height: 'calc(100vh - 130px)' }}>
 
@@ -417,10 +471,16 @@ export default function ChatView({ navegar, initialTermId }: ChatViewProps) {
           {attachedTermId && (
             <div className="flex items-center gap-2 px-3 py-2 badge badge-blue w-full justify-start animate-scale-in">
               <FileText size={14} className="shrink-0" />
-              <span className="font-medium truncate">{attachedTermTitle ?? attachedTermId}</span>
-              <button onClick={() => { setAttachedTermId(null); setAttachedTermTitle(null); }}
+              <button
+                onClick={() => setShowPreview(true)}
+                className="font-medium flex-1 text-left truncate hover:underline min-w-0"
+                title={attachedTermTitle ?? attachedTermId ?? undefined}
+              >
+                {attachedTermTitle ?? attachedTermId}
+              </button>
+              <button onClick={() => { setAttachedTermId(null); setAttachedTermTitle(null); setAttachedTermContent(null); }}
                 aria-label="Remover anexo"
-                className="ml-auto text-brand-400 hover:text-brand-primary transition-colors shrink-0">
+                className="ml-1 text-brand-400 hover:text-brand-primary transition-colors shrink-0">
                 <X size={14} />
               </button>
             </div>
@@ -467,5 +527,6 @@ export default function ChatView({ navegar, initialTermId }: ChatViewProps) {
         </div>
       </div>
     </div>
+    </>
   );
 }

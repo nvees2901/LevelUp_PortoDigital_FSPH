@@ -172,7 +172,7 @@ class IngestionService:
         # Primary: nome do arquivo sem extensão — previsível e sempre legível
         name_without_ext = filename.rsplit(".", 1)[0] if "." in filename else filename
         clean = name_without_ext.replace("_", " ").replace("-", " ").strip()
-        if len(clean) >= 5:
+        if clean:
             return clean[:300]
 
         # Fallback: primeira linha do texto com ≥10 chars e maioria de chars
