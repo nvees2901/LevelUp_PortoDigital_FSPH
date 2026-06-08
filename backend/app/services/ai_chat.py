@@ -317,6 +317,8 @@ class AIChatService:
 
         if settings.is_claude_mode:
             content = await cls._anthropic_synthesize(system_content, user_content)
+        elif settings.is_gemini_mode:
+            content = await cls._gemini_synthesize(system_content, user_content)
         else:
             response, _ = await cls._create_completion(
                 [
@@ -571,6 +573,26 @@ class AIChatService:
         term_complete = cls._detect_term_complete(mode, full_content)
 
         yield json.dumps({"done": True, "term_complete": term_complete})
+
+    @classmethod
+    async def _gemini_synthesize(cls, system_content: str, user_content: str) -> str:
+        """Gera TR final via Gemini (usado em synthesize_tr)."""
+        client = _get_gemini_client()
+        try:
+            response = await asyncio.to_thread(
+                client.models.generate_content,
+                model=settings.GEMINI_MODEL,
+                contents=[{"role": "user", "parts": [{"text": user_content}]}],
+                config={
+                    "system_instruction": system_content,
+                    "max_output_tokens": 3000,
+                    "temperature": 0.3,
+                },
+            )
+            return response.text or ""
+        except Exception as e:
+            logger.error("Erro Gemini synthesize: %s", str(e), exc_info=True)
+            raise AIProviderError(f"Erro ao chamar Gemini: {e}") from e
 
     # ------------------------------------------------------------------ #
     # OpenAI-compatible (Ollama / OpenRouter / OpenAI)
