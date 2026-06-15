@@ -190,33 +190,54 @@ class DocxGeneratorService:
 
     @staticmethod
     def _signature(doc, term_data: dict) -> None:
-        nome = (term_data.get("elaborador_nome") or "").strip() or "Responsável pela elaboração"
-        matricula = (term_data.get("elaborador_matricula") or "").strip()
-        setor = (term_data.get("elaborador_setor") or "").strip()
-        sub = f"Matrícula: {matricula}" + (f" — {setor}" if setor else "") if matricula else "Cargo / Matrícula"
+        elab_nome = (term_data.get("elaborador_nome") or "").strip() or "Responsável Técnico"
+        elab_mat  = (term_data.get("elaborador_matricula") or "").strip()
+        elab_setor = (term_data.get("elaborador_setor") or "").strip() or "Unidade Demandante"
+        elab_sub = f"Mat. {elab_mat} — {elab_setor}" if elab_mat else elab_setor
 
-        aut_nome = (term_data.get("autoridade_nome") or "").strip()
-        aut_cargo = (term_data.get("autoridade_cargo") or "").strip()
-        aut_top = aut_nome or "Autoridade competente"
-        aut_role = "Autoridade competente" if aut_nome else "Cargo / Função"
-        aut_sub = aut_cargo or ""
+        SEI = "(Assinatura Eletrônica via SEI)"
 
-        t = doc.add_table(rows=4, cols=2)
-        t.alignment = WD_TABLE_ALIGNMENT.CENTER
-        data = [
-            ("_" * 34, "_" * 34),
-            (nome, aut_top),
-            ("Responsável pela elaboração", aut_role),
-            (sub, aut_sub),
+        # Nota sobre assinaturas digitais
+        note = doc.add_paragraph(
+            "Este documento será inserido no SEI para coleta das assinaturas digitais qualificadas."
+        )
+        note.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        for run in note.runs:
+            run.italic = True
+            run.font.size = Pt(9)
+            run.font.name = FONT
+
+        doc.add_paragraph()
+
+        # Tabela 2×2: Elaboração | DIROP / DIRAF | DIGER
+        blocks = [
+            ("ELABORAÇÃO TÉCNICA:", elab_nome, elab_sub),
+            ("VALIDAÇÃO TÉCNICA (DIROP):", "Diretor(a) Operacional", "Diretoria Operacional"),
+            ("VALIDAÇÃO DE VIABILIDADE (DIRAF):", "Diretor(a) Adm. e Financeiro", "Diretoria Administrativa e Financeira"),
+            ("AUTORIZAÇÃO (DIGER):", "Diretor(a) Geral", "Diretoria Geral"),
         ]
-        for ri, (l, r) in enumerate(data):
-            for ci, val in enumerate((l, r)):
-                cell = t.cell(ri, ci)
-                cell.text = ""
-                p = cell.paragraphs[0]
+
+        t = doc.add_table(rows=2, cols=2)
+        t.alignment = WD_TABLE_ALIGNMENT.CENTER
+
+        for idx, (label, name, role) in enumerate(blocks):
+            row_idx, col_idx = divmod(idx, 2)
+            cell = t.cell(row_idx, col_idx)
+            cell.text = ""
+
+            def add_line(cell, text, bold=False, italic=False, size=10, color=None):
+                p = cell.add_paragraph()
                 p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-                run = p.add_run(val)
+                run = p.add_run(text)
+                run.bold = bold
+                run.italic = italic
                 run.font.name = FONT
-                run.font.size = Pt(10)
-                if ri == 1:
-                    run.bold = True
+                run.font.size = Pt(size)
+                if color:
+                    run.font.color.rgb = color
+                return p
+
+            add_line(cell, label, bold=True, size=9, color=BRAND)
+            add_line(cell, name, bold=True, size=10)
+            add_line(cell, role, size=9)
+            add_line(cell, SEI, italic=True, size=9, color=GRAY)

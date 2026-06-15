@@ -323,6 +323,28 @@ class PDFGeneratorService:
                 "sign", parent=base["Normal"], fontName=body_font,
                 fontSize=10, alignment=TA_CENTER, leading=13,
             ),
+            "sign_hdr": ParagraphStyle(
+                "sign_hdr", parent=base["Normal"], fontName="Helvetica-Bold",
+                fontSize=9, alignment=TA_CENTER, leading=12, textColor=FSPH_BLUE,
+                spaceAfter=2,
+            ),
+            "sign_name": ParagraphStyle(
+                "sign_name", parent=base["Normal"], fontName="Helvetica-Bold",
+                fontSize=10, alignment=TA_CENTER, leading=13, spaceBefore=4, spaceAfter=1,
+            ),
+            "sign_role": ParagraphStyle(
+                "sign_role", parent=base["Normal"], fontName=body_font,
+                fontSize=9, alignment=TA_CENTER, leading=12, spaceAfter=2,
+            ),
+            "sign_sei": ParagraphStyle(
+                "sign_sei", parent=base["Normal"], fontName="Helvetica-Oblique",
+                fontSize=8.5, alignment=TA_CENTER, leading=11, textColor=FSPH_GRAY,
+            ),
+            "sign_note": ParagraphStyle(
+                "sign_note", parent=base["Normal"], fontName="Helvetica-Oblique",
+                fontSize=8.5, alignment=TA_CENTER, leading=11, textColor=FSPH_GRAY,
+                spaceAfter=8,
+            ),
         }
 
     # ------------------------------------------------------------------ #
@@ -558,38 +580,51 @@ class PDFGeneratorService:
     @classmethod
     def _build_signature_section(cls, styles: dict, term_data: dict | None = None):
         term_data = term_data or {}
-        line = "_" * 38
-        nome = (term_data.get("elaborador_nome") or "").strip()
-        matricula = (term_data.get("elaborador_matricula") or "").strip()
-        setor = (term_data.get("elaborador_setor") or "").strip()
-        aut_nome = (term_data.get("autoridade_nome") or "").strip()
-        aut_cargo = (term_data.get("autoridade_cargo") or "").strip()
-        aut_top = f"<b>{cls._inline(aut_nome)}</b>" if aut_nome else "<b>Autoridade competente</b>"
-        aut_role = "Autoridade competente" if aut_nome else "Cargo / Função"
-        aut_sub = cls._inline(aut_cargo) if aut_cargo else " "
 
-        resp_nome = cls._inline(nome) if nome else "Responsável pela elaboração"
-        if matricula:
-            resp_sub = f"Matrícula: {cls._inline(matricula)}" + (f" — {cls._inline(setor)}" if setor else "")
-        else:
-            resp_sub = "Cargo / Matrícula"
+        elab_nome = (term_data.get("elaborador_nome") or "").strip() or "Responsável Técnico"
+        elab_mat  = (term_data.get("elaborador_matricula") or "").strip()
+        elab_setor = (term_data.get("elaborador_setor") or "").strip() or "Unidade Demandante"
+        elab_sub = f"Mat. {elab_mat} — {elab_setor}" if elab_mat else elab_setor
+
+        SEI = "(Assinatura Eletrônica via SEI)"
+        half = 7.75 * cm
+
+        def block(label: str, name: str, role: str) -> list:
+            return [
+                Paragraph(label, styles["sign_hdr"]),
+                Paragraph(f"<b>{cls._inline(name)}</b>", styles["sign_name"]),
+                Paragraph(cls._inline(role), styles["sign_role"]),
+                Paragraph(SEI, styles["sign_sei"]),
+            ]
+
+        note = Paragraph(
+            "Este documento será inserido no SEI para coleta das assinaturas digitais qualificadas.",
+            styles["sign_note"],
+        )
 
         sig_data = [
-            [Paragraph(line, styles["sign"]), Paragraph(line, styles["sign"])],
-            [Paragraph(f"<b>{resp_nome}</b>", styles["sign"]),
-             Paragraph(aut_top, styles["sign"])],
-            [Paragraph("Responsável pela elaboração", styles["sign"]),
-             Paragraph(aut_role, styles["sign"])],
-            [Paragraph(resp_sub, styles["sign"]),
-             Paragraph(aut_sub, styles["sign"])],
+            [
+                block("ELABORAÇÃO TÉCNICA:", elab_nome, elab_sub),
+                block("VALIDAÇÃO TÉCNICA (DIROP):", "Diretor(a) Operacional", "Diretoria Operacional"),
+            ],
+            [
+                block("VALIDAÇÃO DE VIABILIDADE (DIRAF):", "Diretor(a) Adm. e Financeiro", "Diretoria Administrativa e Financeira"),
+                block("AUTORIZAÇÃO (DIGER):", "Diretor(a) Geral", "Diretoria Geral"),
+            ],
         ]
-        sig_table = Table(sig_data, colWidths=[7.75 * cm, 7.75 * cm])
+
+        sig_table = Table(sig_data, colWidths=[half, half])
         sig_table.setStyle(TableStyle([
-            ("ALIGN", (0, 0), (-1, -1), "CENTER"),
-            ("TOPPADDING", (0, 0), (-1, -1), 3),
-            ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
+            ("ALIGN",        (0, 0), (-1, -1), "CENTER"),
+            ("VALIGN",       (0, 0), (-1, -1), "TOP"),
+            ("TOPPADDING",   (0, 0), (-1, -1), 10),
+            ("BOTTOMPADDING",(0, 0), (-1, -1), 10),
+            ("LEFTPADDING",  (0, 0), (-1, -1), 8),
+            ("RIGHTPADDING", (0, 0), (-1, -1), 8),
+            ("GRID",         (0, 0), (-1, -1), 0.5, FSPH_BORDER),
+            ("ROWBACKGROUNDS",(0, 0), (-1, -1), [FSPH_ROW, colors.white]),
         ]))
-        return KeepTogether(sig_table)
+        return KeepTogether([note, sig_table])
 
     # ------------------------------------------------------------------ #
     # Rodapé
