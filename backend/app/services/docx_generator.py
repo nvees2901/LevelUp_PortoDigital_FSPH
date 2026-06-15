@@ -11,6 +11,8 @@ import re
 from docx import Document
 from docx.enum.table import WD_TABLE_ALIGNMENT
 from docx.enum.text import WD_ALIGN_PARAGRAPH
+from docx.oxml.ns import qn
+from docx.oxml import OxmlElement
 from docx.shared import Pt, RGBColor
 
 from app.services.pdf_generator import clean_tr_content, sync_estimated_value
@@ -20,6 +22,21 @@ logger = get_logger(__name__)
 
 # Termo padronizado em letras pretas.
 BRAND = RGBColor(0x00, 0x00, 0x00)
+
+
+def _remove_table_borders(table) -> None:
+    """Remove todas as bordas visíveis de uma tabela Word via XML."""
+    tbl = table._tbl
+    tblPr = tbl.find(qn("w:tblPr"))
+    if tblPr is None:
+        tblPr = OxmlElement("w:tblPr")
+        tbl.insert(0, tblPr)
+    tblBorders = OxmlElement("w:tblBorders")
+    for side in ("top", "left", "bottom", "right", "insideH", "insideV"):
+        el = OxmlElement(f"w:{side}")
+        el.set(qn("w:val"), "none")
+        tblBorders.append(el)
+    tblPr.append(tblBorders)
 GRAY = RGBColor(0x00, 0x00, 0x00)
 FONT = "Calibri"
 
@@ -219,6 +236,7 @@ class DocxGeneratorService:
 
         t = doc.add_table(rows=2, cols=2)
         t.alignment = WD_TABLE_ALIGNMENT.CENTER
+        _remove_table_borders(t)
 
         for idx, (label, name, role) in enumerate(blocks):
             row_idx, col_idx = divmod(idx, 2)

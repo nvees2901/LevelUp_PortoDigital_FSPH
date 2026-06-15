@@ -617,12 +617,12 @@ class PDFGeneratorService:
         sig_table.setStyle(TableStyle([
             ("ALIGN",        (0, 0), (-1, -1), "CENTER"),
             ("VALIGN",       (0, 0), (-1, -1), "TOP"),
-            ("TOPPADDING",   (0, 0), (-1, -1), 10),
-            ("BOTTOMPADDING",(0, 0), (-1, -1), 10),
-            ("LEFTPADDING",  (0, 0), (-1, -1), 8),
-            ("RIGHTPADDING", (0, 0), (-1, -1), 8),
-            ("GRID",         (0, 0), (-1, -1), 0.5, FSPH_BORDER),
-            ("ROWBACKGROUNDS",(0, 0), (-1, -1), [FSPH_ROW, colors.white]),
+            ("TOPPADDING",   (0, 0), (-1, -1), 14),
+            ("BOTTOMPADDING",(0, 0), (-1, -1), 14),
+            ("LEFTPADDING",  (0, 0), (-1, -1), 6),
+            ("RIGHTPADDING", (0, 0), (-1, -1), 6),
+            # linha fina entre as duas linhas de assinaturas
+            ("LINEBELOW",    (0, 0), (-1, 0), 0.4, FSPH_BORDER),
         ]))
         return KeepTogether([note, sig_table])
 
