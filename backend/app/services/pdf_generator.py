@@ -586,6 +586,9 @@ class PDFGeneratorService:
         elab_setor = (term_data.get("elaborador_setor") or "").strip() or "Unidade Demandante"
         elab_sub = f"Mat. {elab_mat} — {elab_setor}" if elab_mat else elab_setor
 
+        diger_nome = (term_data.get("autoridade_nome") or "").strip() or "Diretor(a) Geral"
+        diger_cargo = (term_data.get("autoridade_cargo") or "").strip() or "Diretoria Geral"
+
         SEI = "(Assinatura Eletrônica via SEI)"
         half = 7.75 * cm
 
@@ -609,7 +612,7 @@ class PDFGeneratorService:
             ],
             [
                 block("VALIDAÇÃO DE VIABILIDADE (DIRAF):", "Diretor(a) Adm. e Financeiro", "Diretoria Administrativa e Financeira"),
-                block("AUTORIZAÇÃO (DIGER):", "Diretor(a) Geral", "Diretoria Geral"),
+                block("AUTORIZAÇÃO (DIGER):", diger_nome, diger_cargo),
             ],
         ]
 

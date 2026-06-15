@@ -346,11 +346,11 @@ export default function TermDetail({ termId, navegar }: TermDetailProps) {
           <div className="card shadow-card-lg w-full max-w-md p-5 animate-scale-in" onClick={e => e.stopPropagation()}>
             <h3 className="section-title mb-1">Gerar {signModal.toUpperCase()}</h3>
             <p className="text-sm text-slate-500 mb-4">
-              Informe a autoridade competente que assinará o documento (opcional — deixe em branco para manter o campo de assinatura vazio).
+              Informe quem assinará como <strong>AUTORIZAÇÃO (DIGER)</strong> no documento — o Diretor Geral responsável pela aprovação final. Deixe em branco para manter o texto padrão.
             </p>
             <div className="space-y-3">
               <div>
-                <label className="label">Autoridade competente — Nome</label>
+                <label className="label">Nome do Diretor(a) Geral</label>
                 <input
                   className="input"
                   value={autNome}

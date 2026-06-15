@@ -226,12 +226,15 @@ class DocxGeneratorService:
 
         doc.add_paragraph()
 
+        diger_nome = (term_data.get("autoridade_nome") or "").strip() or "Diretor(a) Geral"
+        diger_cargo = (term_data.get("autoridade_cargo") or "").strip() or "Diretoria Geral"
+
         # Tabela 2×2: Elaboração | DIROP / DIRAF | DIGER
         blocks = [
             ("ELABORAÇÃO TÉCNICA:", elab_nome, elab_sub),
             ("VALIDAÇÃO TÉCNICA (DIROP):", "Diretor(a) Operacional", "Diretoria Operacional"),
             ("VALIDAÇÃO DE VIABILIDADE (DIRAF):", "Diretor(a) Adm. e Financeiro", "Diretoria Administrativa e Financeira"),
-            ("AUTORIZAÇÃO (DIGER):", "Diretor(a) Geral", "Diretoria Geral"),
+            ("AUTORIZAÇÃO (DIGER):", diger_nome, diger_cargo),
         ]
 
         t = doc.add_table(rows=2, cols=2)

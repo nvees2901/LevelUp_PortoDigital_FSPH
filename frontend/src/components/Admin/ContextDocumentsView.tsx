@@ -113,7 +113,7 @@ interface QueueItem {
 
 const COLLECTION_OPTIONS = [
   { value: 'prompt', label: 'Prompt (instruções e contexto da IA)' },
-  { value: 'tr', label: 'TR (modelos de termo)' },
+  { value: 'tr', label: 'Termos de Referência Aprovados' },
 ] as const;
 
 type CollectionKey = typeof COLLECTION_OPTIONS[number]['value'];
@@ -554,7 +554,7 @@ const COLLECTION_BADGES: Record<string, string> = {
 
 const COLLECTION_LABELS: Record<string, string> = {
   prompt: 'Prompt',
-  tr: 'TR',
+  tr: 'Termos Aprovados',
 };
 
 type StatusFilter = 'all' | 'indexed' | 'pending' | 'failed';
@@ -694,9 +694,13 @@ function DocumentList({
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-2">
                       <FileText size={15} className="text-slate-400 shrink-0" />
-                      <span className="font-medium text-slate-700 truncate max-w-xs" title={doc.original_filename}>
+                      <button
+                        onClick={() => onPreview(doc)}
+                        className="font-medium text-brand-primary hover:underline truncate max-w-xs text-left"
+                        title={`Visualizar: ${doc.original_filename}`}
+                      >
                         {doc.original_filename}
-                      </span>
+                      </button>
                       {doc.is_seed && (
                         <span className="badge badge-blue shrink-0">Seed</span>
                       )}
