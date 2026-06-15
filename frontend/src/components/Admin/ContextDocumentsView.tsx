@@ -813,11 +813,10 @@ interface FixedCollectionsProps {
   onUploaded: () => void;
 }
 
-function FixedCollections({ trDocs, otherFixedDocs, onDelete, onPreview, onUploaded }: FixedCollectionsProps) {
+function FixedCollections({ trDocs, otherFixedDocs, onDelete, onPreview, onUploaded: _onUploaded }: FixedCollectionsProps) {
   const [expanded, setExpanded] = useState(false);
   const [collections, setCollections] = useState<KnowledgeBaseCollection[]>([]);
   const [loadingStats, setLoadingStats] = useState(false);
-  const [showTrUpload, setShowTrUpload] = useState(false);
 
   useEffect(() => {
     if (!expanded) return;
@@ -886,37 +885,16 @@ function FixedCollections({ trDocs, otherFixedDocs, onDelete, onPreview, onUploa
 
           {/* ── Termos de Referência Aprovados ── */}
           <div>
-            <div className="flex items-center justify-between px-5 py-3">
-              <div className="flex items-center gap-2">
-                <FileCheck size={14} className="text-violet-600" />
-                <span className="text-sm font-semibold text-slate-700">Termos de Referência Aprovados</span>
-                <span className="badge badge-violet">{trDocs.length}</span>
-              </div>
-              <button
-                onClick={() => setShowTrUpload(v => !v)}
-                className="btn btn-ghost btn-xs"
-                title="Adicionar termo à base fixa"
-              >
-                {showTrUpload ? <X size={13} /> : <Plus size={13} />}
-                {showTrUpload ? 'Cancelar' : 'Adicionar Termo'}
-              </button>
+            <div className="flex items-center gap-2 px-5 py-3">
+              <FileCheck size={14} className="text-violet-600" />
+              <span className="text-sm font-semibold text-slate-700">Termos de Referência Aprovados</span>
+              <span className="badge badge-violet">{trDocs.length}</span>
+              <span className="text-xs text-slate-400 ml-1">— use "Enviar Arquivos" acima para adicionar</span>
             </div>
-
-            {showTrUpload && (
-              <div className="px-5 pb-4">
-                <UploadZone
-                  fixedCollection="tr"
-                  onUploaded={() => {
-                    setShowTrUpload(false);
-                    onUploaded();
-                  }}
-                />
-              </div>
-            )}
 
             {trDocs.length === 0 ? (
               <p className="px-5 pb-4 text-xs text-slate-400">
-                Nenhum termo aprovado na base fixa. Clique em "Adicionar Termo" para enviar um documento.
+                Nenhum termo aprovado na base. Selecione "Termos de Referência Aprovados" na base de destino e faça upload acima.
               </p>
             ) : (
               <div className="divide-y divide-slate-50">

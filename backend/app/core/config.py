@@ -97,6 +97,13 @@ class Settings(BaseSettings):
     UPLOAD_DIR: str = "uploads"  # pasta onde os arquivos ficam armazenados no servidor
 
     # ------------------------------------------------------------------ #
+    # Google Cloud Storage (opcional — se vazio, salva no disco local)
+    # ------------------------------------------------------------------ #
+    GCS_BUCKET: str = ""               # Ex: "fsph-storage" — vazio desativa GCS
+    GCS_UPLOAD_PREFIX: str = "uploads"
+    GCS_CONTEXT_DOCS_PREFIX: str = "context_documents"
+
+    # ------------------------------------------------------------------ #
     # Documentos de contexto da IA (gerenciados pelo administrador)
     # ------------------------------------------------------------------ #
     CONTEXT_DOCS_DIR: str = "./context_documents"   # pasta de armazenamento dos docs de contexto
