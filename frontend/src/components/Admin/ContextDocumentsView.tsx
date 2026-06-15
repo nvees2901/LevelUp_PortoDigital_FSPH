@@ -806,13 +806,14 @@ function DocumentList({
 // ─── FixedCollections ─────────────────────────────────────────────────────────
 
 interface FixedCollectionsProps {
-  seedDocs: ContextDocument[];
+  trDocs: ContextDocument[];
+  otherFixedDocs: ContextDocument[];
   onDelete: (doc: ContextDocument) => void;
   onPreview: (doc: ContextDocument) => void;
   onUploaded: () => void;
 }
 
-function FixedCollections({ seedDocs, onDelete, onPreview, onUploaded }: FixedCollectionsProps) {
+function FixedCollections({ trDocs, otherFixedDocs, onDelete, onPreview, onUploaded }: FixedCollectionsProps) {
   const [expanded, setExpanded] = useState(false);
   const [collections, setCollections] = useState<KnowledgeBaseCollection[]>([]);
   const [loadingStats, setLoadingStats] = useState(false);
@@ -827,8 +828,7 @@ function FixedCollections({ seedDocs, onDelete, onPreview, onUploaded }: FixedCo
       .finally(() => setLoadingStats(false));
   }, [expanded]);
 
-  const trDocs = seedDocs.filter(d => d.collection === 'tr');
-  const otherDocs = seedDocs.filter(d => d.collection !== 'tr');
+  const totalFixed = trDocs.length + otherFixedDocs.length;
 
   return (
     <div className="card overflow-hidden">
@@ -843,7 +843,7 @@ function FixedCollections({ seedDocs, onDelete, onPreview, onUploaded }: FixedCo
           <div>
             <span className="text-sm font-semibold text-slate-700">Bases de conhecimento fixas</span>
             <span className="text-xs text-slate-400 ml-1.5">
-              ({seedDocs.length} documento{seedDocs.length !== 1 ? 's' : ''} — Lei 14.133, TRs aprovados e mais)
+              ({totalFixed} documento{totalFixed !== 1 ? 's' : ''} — Lei 14.133, TRs aprovados e mais)
             </span>
           </div>
         </div>
@@ -921,7 +921,7 @@ function FixedCollections({ seedDocs, onDelete, onPreview, onUploaded }: FixedCo
             ) : (
               <div className="divide-y divide-slate-50">
                 {trDocs.map(doc => (
-                  <div key={doc.id} className="flex items-center gap-3 px-5 py-3 hover:bg-slate-50/60 transition-colors group">
+                  <div key={doc.id} className="flex items-center gap-3 px-5 py-3 hover:bg-slate-50/60 transition-colors">
                     <FileCheck size={14} className="text-violet-500 shrink-0" />
                     <button
                       onClick={() => onPreview(doc)}
@@ -932,7 +932,7 @@ function FixedCollections({ seedDocs, onDelete, onPreview, onUploaded }: FixedCo
                     </button>
                     <span className="text-xs text-slate-400 shrink-0">{formatBytes(doc.size_bytes)}</span>
                     <StatusBadge status={doc.status} />
-                    <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <div className="flex items-center gap-1">
                       <button
                         onClick={() => onPreview(doc)}
                         title="Pré-visualizar"
@@ -955,16 +955,16 @@ function FixedCollections({ seedDocs, onDelete, onPreview, onUploaded }: FixedCo
           </div>
 
           {/* ── Outros documentos fixos (Lei, contexto) ── */}
-          {otherDocs.length > 0 && (
+          {otherFixedDocs.length > 0 && (
             <div>
               <div className="flex items-center gap-2 px-5 py-3">
                 <FolderOpen size={14} className="text-brand-primary" />
                 <span className="text-sm font-semibold text-slate-700">Outros documentos fixos</span>
-                <span className="badge badge-blue">{otherDocs.length}</span>
+                <span className="badge badge-blue">{otherFixedDocs.length}</span>
               </div>
               <div className="divide-y divide-slate-50">
-                {otherDocs.map(doc => (
-                  <div key={doc.id} className="flex items-center gap-3 px-5 py-3 hover:bg-slate-50/60 transition-colors group">
+                {otherFixedDocs.map(doc => (
+                  <div key={doc.id} className="flex items-center gap-3 px-5 py-3 hover:bg-slate-50/60 transition-colors">
                     <FileText size={14} className="text-brand-primary shrink-0" />
                     <button
                       onClick={() => onPreview(doc)}
@@ -975,7 +975,7 @@ function FixedCollections({ seedDocs, onDelete, onPreview, onUploaded }: FixedCo
                     </button>
                     <span className="text-xs text-slate-400 shrink-0">{formatBytes(doc.size_bytes)}</span>
                     <StatusBadge status={doc.status} />
-                    <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <div className="flex items-center gap-1">
                       <button
                         onClick={() => onPreview(doc)}
                         title="Pré-visualizar"
@@ -1013,8 +1013,12 @@ export default function ContextDocumentsView({ navegar: _navegar }: ContextDocum
   const [previewDoc, setPreviewDoc] = useState<ContextDocument | null>(null);
   const pollRef = useRef<number | null>(null);
 
-  const seedDocs = useMemo(() => docs.filter(d => d.is_seed), [docs]);
-  const uploadedDocs = useMemo(() => docs.filter(d => !d.is_seed), [docs]);
+  // TR docs (seeds + uploaded) → seção "Termos de Referência Aprovados"
+  const trDocs = useMemo(() => docs.filter(d => d.collection === 'tr'), [docs]);
+  // Outros seeds (Lei 14.133, etc.) → seção "Outros documentos fixos"
+  const otherFixedDocs = useMemo(() => docs.filter(d => d.collection !== 'tr' && d.is_seed), [docs]);
+  // Apenas uploads de prompt (não-seed) → lista principal
+  const uploadedDocs = useMemo(() => docs.filter(d => d.collection !== 'tr' && !d.is_seed), [docs]);
 
   const fetchDocs = useCallback(async () => {
     try {
@@ -1136,9 +1140,10 @@ export default function ContextDocumentsView({ navegar: _navegar }: ContextDocum
         onPreview={doc => setPreviewDoc(doc)}
       />
 
-      {/* Fixed collections — seeds, manageable by admin */}
+      {/* Fixed collections — TR (all) + outros seeds */}
       <FixedCollections
-        seedDocs={seedDocs}
+        trDocs={trDocs}
+        otherFixedDocs={otherFixedDocs}
         onDelete={setDeleteTarget}
         onPreview={doc => setPreviewDoc(doc)}
         onUploaded={fetchDocs}
