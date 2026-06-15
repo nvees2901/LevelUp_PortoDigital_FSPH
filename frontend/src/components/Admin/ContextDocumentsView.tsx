@@ -118,10 +118,10 @@ const COLLECTION_OPTIONS = [
 
 type CollectionKey = typeof COLLECTION_OPTIONS[number]['value'];
 
-function UploadZone({ onUploaded }: { onUploaded: () => void }) {
+function UploadZone({ onUploaded, fixedCollection }: { onUploaded: () => void; fixedCollection?: CollectionKey }) {
   const [dragOver, setDragOver] = useState(false);
   const [queue, setQueue] = useState<QueueItem[]>([]);
-  const [collection, setCollection] = useState<CollectionKey>('prompt');
+  const [collection, setCollection] = useState<CollectionKey>(fixedCollection ?? 'prompt');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const MAX_FILE_SIZE_MB = 20;
@@ -186,19 +186,21 @@ function UploadZone({ onUploaded }: { onUploaded: () => void }) {
         <h2 className="section-title">Enviar arquivos</h2>
       </div>
 
-      <div>
-        <label className="label">Base de destino</label>
-        <select
-          value={collection}
-          onChange={e => setCollection(e.target.value as CollectionKey)}
-          disabled={isUploading}
-          className="input disabled:opacity-50"
-        >
-          {COLLECTION_OPTIONS.map(o => (
-            <option key={o.value} value={o.value}>{o.label}</option>
-          ))}
-        </select>
-      </div>
+      {!fixedCollection && (
+        <div>
+          <label className="label">Base de destino</label>
+          <select
+            value={collection}
+            onChange={e => setCollection(e.target.value as CollectionKey)}
+            disabled={isUploading}
+            className="input disabled:opacity-50"
+          >
+            {COLLECTION_OPTIONS.map(o => (
+              <option key={o.value} value={o.value}>{o.label}</option>
+            ))}
+          </select>
+        </div>
+      )}
 
       <div
         onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
@@ -388,6 +390,12 @@ function DeleteConfirmModal({
               Tem certeza que deseja remover <span className="font-medium text-slate-700">"{doc.original_filename}"</span>?
               Os chunks serão removidos da base de conhecimento da IA.
             </p>
+            {doc.is_seed && (
+              <div className="mt-3 flex items-start gap-2 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+                <AlertTriangle size={13} className="shrink-0 mt-0.5" />
+                <span>Este é um documento da base fixa. Após a remoção, ele não será restaurado automaticamente — você precisará fazer o upload novamente.</span>
+              </div>
+            )}
           </div>
         </div>
         <div className="flex gap-2 justify-end">
@@ -797,19 +805,30 @@ function DocumentList({
 
 // ─── FixedCollections ─────────────────────────────────────────────────────────
 
-function FixedCollections() {
+interface FixedCollectionsProps {
+  seedDocs: ContextDocument[];
+  onDelete: (doc: ContextDocument) => void;
+  onPreview: (doc: ContextDocument) => void;
+  onUploaded: () => void;
+}
+
+function FixedCollections({ seedDocs, onDelete, onPreview, onUploaded }: FixedCollectionsProps) {
   const [expanded, setExpanded] = useState(false);
   const [collections, setCollections] = useState<KnowledgeBaseCollection[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [loadingStats, setLoadingStats] = useState(false);
+  const [showTrUpload, setShowTrUpload] = useState(false);
 
   useEffect(() => {
     if (!expanded) return;
-    setLoading(true);
+    setLoadingStats(true);
     getKnowledgeBaseCollections()
       .then(data => setCollections(data.items))
       .catch(() => setCollections([]))
-      .finally(() => setLoading(false));
+      .finally(() => setLoadingStats(false));
   }, [expanded]);
+
+  const trDocs = seedDocs.filter(d => d.collection === 'tr');
+  const otherDocs = seedDocs.filter(d => d.collection !== 'tr');
 
   return (
     <div className="card overflow-hidden">
@@ -823,45 +842,161 @@ function FixedCollections() {
           </div>
           <div>
             <span className="text-sm font-semibold text-slate-700">Bases de conhecimento fixas</span>
-            <span className="text-xs text-slate-400 ml-1.5">(Lei 14.133, TRs aprovados e mais)</span>
+            <span className="text-xs text-slate-400 ml-1.5">
+              ({seedDocs.length} documento{seedDocs.length !== 1 ? 's' : ''} — Lei 14.133, TRs aprovados e mais)
+            </span>
           </div>
         </div>
         {expanded ? <ChevronDown size={16} className="text-slate-400" /> : <ChevronRight size={16} className="text-slate-400" />}
       </button>
 
       {expanded && (
-        <div className="border-t border-slate-100 animate-fade-in">
-          {loading ? (
-            <div className="p-6 text-center text-sm text-slate-400 flex items-center justify-center gap-2">
-              <RefreshCw size={14} className="animate-spin" /> Carregando...
-            </div>
-          ) : collections.length === 0 ? (
-            <div className="p-6 text-center text-sm text-slate-400">
-              ChromaDB indisponível — estatísticas não carregadas.
-            </div>
-          ) : (
-            <div className="divide-y divide-slate-50">
-              {collections.map(col => (
-                <div key={col.name} className="flex items-start gap-3 px-5 py-4 hover:bg-slate-50/60 transition-colors">
-                  <div className="p-1.5 rounded-lg bg-slate-100 shrink-0 mt-0.5">
-                    {COLLECTION_ICONS[col.name] ?? <FolderOpen size={13} className="text-slate-500 shrink-0" />}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className="text-sm font-medium text-slate-800">{col.display_name}</span>
+        <div className="border-t border-slate-100 animate-fade-in divide-y divide-slate-100">
+
+          {/* ── Estatísticas ChromaDB ── */}
+          <div className="px-5 py-3">
+            <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-2">Estatísticas ChromaDB</p>
+            {loadingStats ? (
+              <div className="text-xs text-slate-400 flex items-center gap-2 py-2">
+                <RefreshCw size={12} className="animate-spin" /> Carregando estatísticas...
+              </div>
+            ) : collections.length === 0 ? (
+              <p className="text-xs text-slate-400 py-2">ChromaDB indisponível — estatísticas não carregadas.</p>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                {collections.map(col => (
+                  <div key={col.name} className="flex items-center gap-2 bg-slate-50 rounded-lg px-3 py-2">
+                    <div className="p-1 rounded bg-white border border-slate-200 shrink-0">
+                      {COLLECTION_ICONS[col.name] ?? <FolderOpen size={12} className="text-slate-500" />}
                     </div>
-                    <p className="text-xs text-slate-500 mt-0.5">{col.description}</p>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-xs font-medium text-slate-700 truncate">{col.display_name}</p>
+                    </div>
+                    <div className="shrink-0 text-right">
+                      <span className="text-sm font-bold text-slate-700">
+                        {col.chunks_count !== null ? col.chunks_count.toLocaleString('pt-BR') : '—'}
+                      </span>
+                      <p className="text-xs text-slate-400 leading-none">chunks</p>
+                    </div>
                   </div>
-                  <div className="shrink-0 text-right">
-                    <span className="text-sm font-semibold text-slate-700">
-                      {col.chunks_count !== null ? col.chunks_count.toLocaleString('pt-BR') : '—'}
-                    </span>
-                    <p className="text-xs text-slate-400">chunks</p>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* ── Termos de Referência Aprovados ── */}
+          <div>
+            <div className="flex items-center justify-between px-5 py-3">
+              <div className="flex items-center gap-2">
+                <FileCheck size={14} className="text-violet-600" />
+                <span className="text-sm font-semibold text-slate-700">Termos de Referência Aprovados</span>
+                <span className="badge badge-violet">{trDocs.length}</span>
+              </div>
+              <button
+                onClick={() => setShowTrUpload(v => !v)}
+                className="btn btn-ghost btn-xs"
+                title="Adicionar termo à base fixa"
+              >
+                {showTrUpload ? <X size={13} /> : <Plus size={13} />}
+                {showTrUpload ? 'Cancelar' : 'Adicionar Termo'}
+              </button>
+            </div>
+
+            {showTrUpload && (
+              <div className="px-5 pb-4">
+                <UploadZone
+                  fixedCollection="tr"
+                  onUploaded={() => {
+                    setShowTrUpload(false);
+                    onUploaded();
+                  }}
+                />
+              </div>
+            )}
+
+            {trDocs.length === 0 ? (
+              <p className="px-5 pb-4 text-xs text-slate-400">
+                Nenhum termo aprovado na base fixa. Clique em "Adicionar Termo" para enviar um documento.
+              </p>
+            ) : (
+              <div className="divide-y divide-slate-50">
+                {trDocs.map(doc => (
+                  <div key={doc.id} className="flex items-center gap-3 px-5 py-3 hover:bg-slate-50/60 transition-colors group">
+                    <FileCheck size={14} className="text-violet-500 shrink-0" />
+                    <button
+                      onClick={() => onPreview(doc)}
+                      className="flex-1 text-sm text-brand-primary hover:underline text-left truncate"
+                      title={`Visualizar: ${doc.original_filename}`}
+                    >
+                      {doc.original_filename}
+                    </button>
+                    <span className="text-xs text-slate-400 shrink-0">{formatBytes(doc.size_bytes)}</span>
+                    <StatusBadge status={doc.status} />
+                    <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <button
+                        onClick={() => onPreview(doc)}
+                        title="Pré-visualizar"
+                        className="btn btn-ghost btn-xs"
+                      >
+                        <Eye size={13} />
+                      </button>
+                      <button
+                        onClick={() => onDelete(doc)}
+                        title="Remover da base fixa"
+                        className="btn btn-danger btn-xs"
+                      >
+                        <Trash2 size={13} />
+                      </button>
+                    </div>
                   </div>
-                </div>
-              ))}
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* ── Outros documentos fixos (Lei, contexto) ── */}
+          {otherDocs.length > 0 && (
+            <div>
+              <div className="flex items-center gap-2 px-5 py-3">
+                <FolderOpen size={14} className="text-brand-primary" />
+                <span className="text-sm font-semibold text-slate-700">Outros documentos fixos</span>
+                <span className="badge badge-blue">{otherDocs.length}</span>
+              </div>
+              <div className="divide-y divide-slate-50">
+                {otherDocs.map(doc => (
+                  <div key={doc.id} className="flex items-center gap-3 px-5 py-3 hover:bg-slate-50/60 transition-colors group">
+                    <FileText size={14} className="text-brand-primary shrink-0" />
+                    <button
+                      onClick={() => onPreview(doc)}
+                      className="flex-1 text-sm text-brand-primary hover:underline text-left truncate"
+                      title={`Visualizar: ${doc.original_filename}`}
+                    >
+                      {doc.original_filename}
+                    </button>
+                    <span className="text-xs text-slate-400 shrink-0">{formatBytes(doc.size_bytes)}</span>
+                    <StatusBadge status={doc.status} />
+                    <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <button
+                        onClick={() => onPreview(doc)}
+                        title="Pré-visualizar"
+                        className="btn btn-ghost btn-xs"
+                      >
+                        <Eye size={13} />
+                      </button>
+                      <button
+                        onClick={() => onDelete(doc)}
+                        title="Remover da base fixa"
+                        className="btn btn-danger btn-xs"
+                      >
+                        <Trash2 size={13} />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
             </div>
           )}
+
         </div>
       )}
     </div>
@@ -877,6 +1012,9 @@ export default function ContextDocumentsView({ navegar: _navegar }: ContextDocum
   const [deleteTarget, setDeleteTarget] = useState<ContextDocument | null>(null);
   const [previewDoc, setPreviewDoc] = useState<ContextDocument | null>(null);
   const pollRef = useRef<number | null>(null);
+
+  const seedDocs = useMemo(() => docs.filter(d => d.is_seed), [docs]);
+  const uploadedDocs = useMemo(() => docs.filter(d => !d.is_seed), [docs]);
 
   const fetchDocs = useCallback(async () => {
     try {
@@ -969,7 +1107,7 @@ export default function ContextDocumentsView({ navegar: _navegar }: ContextDocum
         </div>
       </div>
 
-      {/* Stats */}
+      {/* Stats — all docs including seeds */}
       <StatsHeader docs={docs} />
 
       {/* Entrada de documentos */}
@@ -986,9 +1124,9 @@ export default function ContextDocumentsView({ navegar: _navegar }: ContextDocum
         </div>
       )}
 
-      {/* Documents */}
+      {/* Documents uploaded by admin (non-seed) */}
       <DocumentList
-        docs={docs}
+        docs={uploadedDocs}
         loading={loading}
         onRefresh={fetchDocs}
         onDelete={setDeleteTarget}
@@ -998,8 +1136,13 @@ export default function ContextDocumentsView({ navegar: _navegar }: ContextDocum
         onPreview={doc => setPreviewDoc(doc)}
       />
 
-      {/* Fixed collections */}
-      <FixedCollections />
+      {/* Fixed collections — seeds, manageable by admin */}
+      <FixedCollections
+        seedDocs={seedDocs}
+        onDelete={setDeleteTarget}
+        onPreview={doc => setPreviewDoc(doc)}
+        onUploaded={fetchDocs}
+      />
 
       {/* Delete modal */}
       {deleteTarget && (
