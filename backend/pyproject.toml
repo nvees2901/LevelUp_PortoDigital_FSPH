@@ -17,8 +17,6 @@ dependencies = [
     "pydantic>=2.8.0",
     "pydantic-settings>=2.4.0",  # leitura de .env com tipagem
     "python-dotenv>=1.0.0",
-    # --- HTTP cliente ---
-    "httpx>=0.27.0",
     # --- IA ---
     "openai>=1.40.0",
     "google-genai>=1.0.0",
@@ -31,8 +29,6 @@ dependencies = [
     "passlib[bcrypt]>=1.7.4",  # hash de senhas com bcrypt
     "bcrypt<5",                 # passlib 1.7.x é incompatível com bcrypt>=5
     "pyjwt>=2.9.0",            # geração e verificação de JWT
-    # --- Utilitários ---
-    "aiofiles>=24.0.0",     # leitura/escrita async de arquivos
     # --- RAG / Banco Vetorial ---
     "chromadb>=0.6.0",                     # cliente HTTP para ChromaDB server (Docker)
     "olefile>=0.47",
@@ -54,6 +50,7 @@ build-backend = "hatchling.build"
 [dependency-groups]
 dev = [
     "aiosqlite>=0.22.1",
+    "httpx>=0.28.1",
     "pytest>=9.0.3",
     "pytest-asyncio>=1.3.0",
 ]

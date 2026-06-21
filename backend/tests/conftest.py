@@ -146,17 +146,12 @@ class FakeStorageService:
 
     async def delete(self, object_name: str) -> None:
         """
-        Deleta um objeto do storage.
+        Deleta um objeto do storage (idempotente: silencioso se não existir).
 
         Args:
             object_name: Caminho/nome do objeto no storage.
-
-        Raises:
-            KeyError: Se o objeto não existir.
         """
-        if object_name not in self._storage:
-            raise KeyError(f"Objeto não encontrado: {object_name}")
-        del self._storage[object_name]
+        self._storage.pop(object_name, None)
 
     async def exists(self, object_name: str) -> bool:
         """
