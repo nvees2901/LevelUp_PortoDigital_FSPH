@@ -31,6 +31,7 @@ from app.schemas.chat import (
 )
 from app.services.ai_chat import AIChatService, AINotConfiguredError, AIProviderError
 from app.services.chat_orchestrator import ChatOrchestratorService
+from app.services.context_loader import load_context
 from app.utils.logging import get_logger
 
 logger = get_logger(__name__)
@@ -78,6 +79,7 @@ async def send_message(payload: ChatRequest, db: DbDep, current_user: CurrentUse
             mode=session.mode,
             history=history,
             term_content=term_content,
+            extra_context=await load_context(db, "prompt"),
         )
     except AINotConfiguredError as e:
         raise HTTPException(status_code=503, detail=str(e))
@@ -230,7 +232,7 @@ async def finalize_session(session_id: str, db: DbDep, current_user: CurrentUser
     # aprovado da FSPH como modelo.
     history = [m for m in session.messages if m.get("role") in ("user", "assistant")]
     try:
-        tr_final = await AIChatService.synthesize_tr(history)
+        tr_final = await AIChatService.synthesize_tr(history, extra_context=await load_context(db, "prompt"))
     except AINotConfiguredError as e:
         raise HTTPException(status_code=503, detail=str(e))
     except AIProviderError as e:

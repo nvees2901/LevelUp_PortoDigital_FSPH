@@ -85,10 +85,10 @@ class Settings(BaseSettings):
     # O Next.js roda na porta 3000, então precisa estar aqui
 
     # ------------------------------------------------------------------ #
-    # Upload de arquivos
+    # Upload de arquivos / Google Cloud Storage
     # ------------------------------------------------------------------ #
     MAX_FILE_SIZE_MB: int = 10  # limite máximo por arquivo (critério de aceitação do HU-01)
-    UPLOAD_DIR: str = "uploads"  # pasta onde os arquivos ficam armazenados no servidor
+    GCS_BUCKET: str = "fsph-uploads-2026"  # bucket GCS para armazenar uploads
 
     # ------------------------------------------------------------------ #
     # Documentos de contexto da IA (gerenciados pelo administrador)
@@ -105,7 +105,7 @@ class Settings(BaseSettings):
     # ------------------------------------------------------------------ #
     # IA — timeout de chamadas HTTP
     # ------------------------------------------------------------------ #
-    AI_TIMEOUT_SECONDS: float = 60.0  # timeout para chamadas à API de IA (segundos)
+    AI_TIMEOUT_SECONDS: float = 180.0  # timeout para chamadas à API de IA (s); modelos locais são mais lentos
 
     # ------------------------------------------------------------------ #
     # Propriedade calculada — não vem do .env

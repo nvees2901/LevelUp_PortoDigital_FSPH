@@ -60,40 +60,36 @@ export default function LoginPage() {
 
             <form onSubmit={handleSubmit} className="space-y-4">
               <div>
-                <label className="text-xs font-semibold text-slate-600 uppercase tracking-wide block mb-1.5">
-                  Usuário / Matrícula
-                </label>
+                <label className="label">Usuário / Matrícula</label>
                 <div className="relative">
-                  <User className="absolute left-3 top-2.5 text-slate-400" size={16} />
+                  <User className="absolute left-3 top-3 text-slate-400 pointer-events-none" size={16} />
                   <input
                     type="text"
                     name="matricula"
                     required
                     autoFocus
                     placeholder="Digite seu usuário"
-                    className="w-full pl-9 pr-4 py-2.5 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-primary"
+                    className="input input-icon"
                   />
                 </div>
               </div>
               <div>
-                <label className="text-xs font-semibold text-slate-600 uppercase tracking-wide block mb-1.5">
-                  Senha
-                </label>
+                <label className="label">Senha</label>
                 <div className="relative">
-                  <Lock className="absolute left-3 top-2.5 text-slate-400" size={16} />
+                  <Lock className="absolute left-3 top-3 text-slate-400 pointer-events-none" size={16} />
                   <input
                     type="password"
                     name="senha"
                     required
                     placeholder="••••••••"
-                    className="w-full pl-9 pr-4 py-2.5 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-primary"
+                    className="input input-icon"
                   />
                 </div>
               </div>
               <button
                 type="submit"
                 disabled={loading}
-                className="w-full py-2.5 text-white rounded-lg font-bold text-sm bg-brand-primary hover:bg-brand-hover disabled:opacity-60 disabled:cursor-not-allowed transition-colors shadow-md mt-2"
+                className="btn btn-primary btn-md w-full mt-2"
               >
                 {loading ? 'Entrando...' : 'Acessar o Sistema'}
               </button>

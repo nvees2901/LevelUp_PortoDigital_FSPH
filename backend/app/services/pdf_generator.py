@@ -139,6 +139,29 @@ def clean_tr_content(md: str) -> str:
     return "\n\n".join(blocks).strip()
 
 
+def format_brl(value) -> str:
+    """Formata um valor como moeda brasileira (R$ 1.234,56)."""
+    from decimal import Decimal, InvalidOperation
+    try:
+        v = Decimal(str(value))
+    except (InvalidOperation, TypeError, ValueError):
+        return ""
+    return f"R$ {v:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+
+
+def sync_estimated_value(content: str, value) -> str:
+    """Sincroniza o valor estimado do metadado no texto do TR: substitui a
+    primeira ocorrência de 'R$ ...' pelo valor informado. Se o metadado não
+    tiver valor, o texto é mantido como está."""
+    if value is None or not content:
+        return content
+    formatted = format_brl(value)
+    if not formatted:
+        return content
+    new, n = re.subn(r"R\$\s*[\d][\d.,]*", formatted, content, count=1)
+    return new if n else content
+
+
 class PDFGeneratorService:
 
     # ------------------------------------------------------------------ #
@@ -166,7 +189,7 @@ class PDFGeneratorService:
         # --- Cabeçalho institucional ---
         story.extend(cls._build_header(styles))
         story.append(Spacer(1, 0.25 * cm))
-        story.append(HRFlowable(width="100%", thickness=1.2, color=FSPH_BLUE))
+        story.append(HRFlowable(width="100%", thickness=1.2, color=colors.black))
         story.append(Spacer(1, 0.5 * cm))
 
         # --- Título do documento ---
@@ -183,6 +206,7 @@ class PDFGeneratorService:
             story.extend(cls._build_sections(sections, styles))
         else:
             content = (term_data.get("content") or "").strip()
+            content = sync_estimated_value(content, term_data.get("estimated_value"))
             if content:
                 story.extend(cls._render_markdown(content, styles))
             else:
@@ -196,7 +220,7 @@ class PDFGeneratorService:
 
         # --- Assinaturas ---
         story.append(Spacer(1, 1.2 * cm))
-        story.append(cls._build_signature_section(styles))
+        story.append(cls._build_signature_section(styles, term_data))
 
         doc.build(
             story,
@@ -218,26 +242,27 @@ class PDFGeneratorService:
     @staticmethod
     def _build_styles() -> dict:
         base = getSampleStyleSheet()
-        body_font = "Times-Roman"
-        bold_font = "Times-Bold"
+        # Fonte única em todo o documento (família Helvetica).
+        body_font = "Helvetica"
+        bold_font = "Helvetica-Bold"
         return {
             "institution": ParagraphStyle(
                 "institution", parent=base["Normal"], fontName="Helvetica",
-                fontSize=9, textColor=FSPH_GRAY, alignment=TA_CENTER, spaceAfter=1,
+                fontSize=9, textColor=colors.black, alignment=TA_CENTER, spaceAfter=1,
             ),
             "institution_name": ParagraphStyle(
                 "institution_name", parent=base["Normal"], fontName="Helvetica-Bold",
-                fontSize=12.5, textColor=FSPH_BLUE, alignment=TA_CENTER,
+                fontSize=12.5, textColor=colors.black, alignment=TA_CENTER,
                 spaceBefore=3, spaceAfter=1,
             ),
             "doc_title": ParagraphStyle(
                 "doc_title", parent=base["Normal"], fontName="Helvetica-Bold",
-                fontSize=15, textColor=FSPH_BLUE, alignment=TA_CENTER,
+                fontSize=15, textColor=colors.black, alignment=TA_CENTER,
                 spaceBefore=2, spaceAfter=2, leading=18,
             ),
             "doc_subtitle": ParagraphStyle(
                 "doc_subtitle", parent=base["Normal"], fontName=body_font,
-                fontSize=11, textColor=FSPH_GRAY, alignment=TA_CENTER,
+                fontSize=11, textColor=colors.black, alignment=TA_CENTER,
                 leading=15, spaceBefore=2,
             ),
             # Corpo justificado (padrão documental)
@@ -247,12 +272,12 @@ class PDFGeneratorService:
             ),
             "h1": ParagraphStyle(
                 "h1", parent=base["Normal"], fontName="Helvetica-Bold",
-                fontSize=12.5, textColor=FSPH_BLUE, spaceBefore=14, spaceAfter=3,
+                fontSize=12.5, textColor=colors.black, spaceBefore=14, spaceAfter=3,
                 leading=15,
             ),
             "h2": ParagraphStyle(
                 "h2", parent=base["Normal"], fontName="Helvetica-Bold",
-                fontSize=11.5, textColor=FSPH_BLUE, spaceBefore=12, spaceAfter=3,
+                fontSize=11.5, textColor=colors.black, spaceBefore=12, spaceAfter=3,
                 leading=14,
             ),
             "h3": ParagraphStyle(
@@ -262,7 +287,7 @@ class PDFGeneratorService:
             ),
             "legal": ParagraphStyle(
                 "legal", parent=base["Normal"], fontName="Helvetica-Oblique",
-                fontSize=8, textColor=FSPH_GRAY, spaceAfter=4,
+                fontSize=8, textColor=colors.black, spaceAfter=4,
             ),
             "bullet": ParagraphStyle(
                 "bullet", parent=base["Normal"], fontName=body_font,
@@ -280,7 +305,7 @@ class PDFGeneratorService:
             ),
             "cell_head": ParagraphStyle(
                 "cell_head", parent=base["Normal"], fontName="Helvetica-Bold",
-                fontSize=9.5, leading=12, textColor=colors.white,
+                fontSize=9.5, leading=12, textColor=colors.black,
             ),
             "id_key": ParagraphStyle(
                 "id_key", parent=base["Normal"], fontName="Helvetica-Bold",
@@ -473,7 +498,7 @@ class PDFGeneratorService:
         col_w = [avail / ncols] * ncols
         table = Table(data, colWidths=col_w, repeatRows=1)
         table.setStyle(TableStyle([
-            ("BACKGROUND", (0, 0), (-1, 0), FSPH_BLUE),
+            ("BACKGROUND", (0, 0), (-1, 0), FSPH_ROW),
             ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, FSPH_ROW]),
             ("GRID", (0, 0), (-1, -1), 0.5, FSPH_BORDER),
             ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
@@ -507,8 +532,8 @@ class PDFGeneratorService:
         # itálico *x* / _x_
         s = re.sub(r"(?<![\*\w])\*(?!\s)(.+?)(?<!\s)\*(?![\*\w])", r"<i>\1</i>", s)
         s = re.sub(r"(?<![_\w])_(?!\s)(.+?)(?<!\s)_(?![_\w])", r"<i>\1</i>", s)
-        # código `x`
-        s = re.sub(r"`(.+?)`", r'<font face="Courier">\1</font>', s)
+        # código `x` — mantém a fonte única do documento (sem trocar para mono)
+        s = re.sub(r"`(.+?)`", r"\1", s)
         # links [t](u) -> t (u)
         s = re.sub(r"\[(.+?)\]\((.+?)\)", r"\1 (\2)", s)
         return s
@@ -531,14 +556,32 @@ class PDFGeneratorService:
     # Assinaturas
     # ------------------------------------------------------------------ #
     @classmethod
-    def _build_signature_section(cls, styles: dict):
+    def _build_signature_section(cls, styles: dict, term_data: dict | None = None):
+        term_data = term_data or {}
         line = "_" * 38
+        nome = (term_data.get("elaborador_nome") or "").strip()
+        matricula = (term_data.get("elaborador_matricula") or "").strip()
+        setor = (term_data.get("elaborador_setor") or "").strip()
+        aut_nome = (term_data.get("autoridade_nome") or "").strip()
+        aut_cargo = (term_data.get("autoridade_cargo") or "").strip()
+        aut_top = f"<b>{cls._inline(aut_nome)}</b>" if aut_nome else "<b>Autoridade competente</b>"
+        aut_role = "Autoridade competente" if aut_nome else "Cargo / Função"
+        aut_sub = cls._inline(aut_cargo) if aut_cargo else " "
+
+        resp_nome = cls._inline(nome) if nome else "Responsável pela elaboração"
+        if matricula:
+            resp_sub = f"Matrícula: {cls._inline(matricula)}" + (f" — {cls._inline(setor)}" if setor else "")
+        else:
+            resp_sub = "Cargo / Matrícula"
+
         sig_data = [
             [Paragraph(line, styles["sign"]), Paragraph(line, styles["sign"])],
+            [Paragraph(f"<b>{resp_nome}</b>", styles["sign"]),
+             Paragraph(aut_top, styles["sign"])],
             [Paragraph("Responsável pela elaboração", styles["sign"]),
-             Paragraph("Autoridade competente", styles["sign"])],
-            [Paragraph("Cargo / Matrícula", styles["sign"]),
-             Paragraph("Cargo / Matrícula", styles["sign"])],
+             Paragraph(aut_role, styles["sign"])],
+            [Paragraph(resp_sub, styles["sign"]),
+             Paragraph(aut_sub, styles["sign"])],
         ]
         sig_table = Table(sig_data, colWidths=[7.75 * cm, 7.75 * cm])
         sig_table.setStyle(TableStyle([

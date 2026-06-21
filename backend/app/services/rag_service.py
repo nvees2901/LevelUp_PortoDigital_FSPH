@@ -14,6 +14,7 @@ Coleções ChromaDB:
 """
 
 import asyncio
+import io
 import re
 import threading
 from pathlib import Path
@@ -32,6 +33,21 @@ def _extract_pdf_text(file_path: Path) -> str:
     """
     from pypdf import PdfReader
     reader = PdfReader(str(file_path))
+    parts = []
+    for page in reader.pages:
+        text = page.extract_text()
+        if text:
+            parts.append(text)
+    return "\n".join(parts)
+
+
+def _extract_pdf_text_from_bytes(pdf_bytes_io) -> str:
+    """
+    Extrai texto de PDF a partir de um objeto BytesIO (sem acesso ao disco).
+    Usa pypdf/PdfReader — mesma lib que _extract_pdf_text.
+    """
+    from pypdf import PdfReader
+    reader = PdfReader(pdf_bytes_io)
     parts = []
     for page in reader.pages:
         text = page.extract_text()
@@ -89,9 +105,8 @@ class RagService:
         with cls._indexing_lock:
             if cls._client is None:
                 cls.setup()
-            cls._client.get_or_create_collection(name="lei_14133")
-            cls._client.get_or_create_collection(name="termos_aprovados")
-            cls._client.get_or_create_collection(name="context_extra")
+            cls._client.get_or_create_collection(name="prompt")
+            cls._client.get_or_create_collection(name="tr")
             logger.info("✓ Coleções ChromaDB garantidas")
 
     @classmethod
@@ -147,10 +162,11 @@ class RagService:
                 continue
 
             filename = file_path.name
-            if "14133" in filename or "Lei" in filename:
-                collection = "lei_14133"
+            # TRs aprovados → categoria 'tr' (modelos); demais (Lei, etc.) → 'prompt'.
+            if "termo de refer" in filename.lower() or filename.lower().startswith("tr"):
+                collection = "tr"
             else:
-                collection = "termos_aprovados"
+                collection = "prompt"
 
             logger.info("Importando seed: %s → %s", filename, collection)
             size_bytes = file_path.stat().st_size
@@ -396,7 +412,7 @@ class RagService:
 
     @classmethod
     async def index_uploaded_document(
-        cls, storage_path: str, filename: str, collection: str = "context_extra"
+        cls, file_bytes: bytes, filename: str, collection: str = "context_extra"
     ) -> int:
         """Indexa um documento de contexto na coleção informada."""
         if not settings.RAG_ENABLED:
@@ -409,16 +425,12 @@ class RagService:
             lambda: cls._client.get_or_create_collection(name=collection)
         )
 
-        file_path = Path(storage_path)
-
-        if file_path.suffix.lower() == ".txt":
-            text = await asyncio.to_thread(
-                lambda: file_path.read_text(encoding="utf-8")
-            )
-        elif file_path.suffix.lower() == ".pdf":
-            text = await asyncio.to_thread(_extract_pdf_text, file_path)
+        filename_lower = filename.lower()
+        if filename_lower.endswith(".txt"):
+            text = file_bytes.decode("utf-8")
+        elif filename_lower.endswith(".pdf"):
+            text = await asyncio.to_thread(_extract_pdf_text_from_bytes, io.BytesIO(file_bytes))
         else:
-            file_bytes = await asyncio.to_thread(file_path.read_bytes)
             from app.services.document import DocumentService
             text = await asyncio.to_thread(
                 DocumentService.extract_text_sync, file_bytes, filename

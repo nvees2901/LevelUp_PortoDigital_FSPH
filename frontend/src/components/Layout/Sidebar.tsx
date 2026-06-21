@@ -1,4 +1,4 @@
-import { PieChart, FileText, Bot, LogOut, Brain } from 'lucide-react';
+import { PieChart, FileText, Bot, LogOut, Brain, Users } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import type { TelaId } from '../../types';
 
@@ -11,14 +11,16 @@ export default function Sidebar({ telaAtual, navegar }: SidebarProps) {
   const { usuario, logout } = useAuth();
   if (!usuario) return null;
 
-  const btn = (id: TelaId, label: string, Icon: typeof PieChart) => (
-    <button key={id} onClick={() => navegar(id)}
-      className={`flex items-center gap-2.5 w-full px-3 py-2.5 rounded-lg transition-all text-sm font-medium ${
-        telaAtual === id ? 'bg-brand-primary text-white shadow-sm' : 'text-slate-600 hover:bg-slate-100 hover:text-brand-primary'
-      }`}>
-      <Icon size={17} />{label}
-    </button>
-  );
+  const btn = (id: TelaId, label: string, Icon: typeof PieChart) => {
+    const active = telaAtual === id;
+    return (
+      <button key={id} onClick={() => navegar(id)}
+        className={`nav-item ${active ? 'nav-item-active' : 'nav-item-idle'}`}>
+        {active && <span className="absolute left-0 top-2 bottom-2 w-1 rounded-r-full bg-white/90" />}
+        <Icon size={17} />{label}
+      </button>
+    );
+  };
 
   return (
     <aside className="w-56 bg-white border-r border-slate-200 flex flex-col shadow-sm z-10">
@@ -27,6 +29,7 @@ export default function Sidebar({ telaAtual, navegar }: SidebarProps) {
         {btn('dashboard', 'Dashboard', PieChart)}
         {btn('lista', 'Processos', FileText)}
         {usuario.is_admin && btn('admin', 'Base de Conhecimento IA', Brain)}
+        {usuario.is_admin && btn('usuarios', 'Usuários', Users)}
         <div className="pt-4 pb-1">
           <p className="text-xs uppercase text-slate-400 font-bold px-2 tracking-wider">Assistente IA</p>
         </div>
