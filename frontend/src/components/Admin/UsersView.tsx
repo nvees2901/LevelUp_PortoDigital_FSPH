@@ -45,6 +45,12 @@ function UserModal({ editTarget, onClose, onSaved }: UserModalProps) {
     setFormError(null);
     setSubmitting(true);
 
+    if (!nome.trim()) {
+      setFormError('Nome é obrigatório.');
+      setSubmitting(false);
+      return;
+    }
+
     try {
       if (isEdit) {
         const data: UserUpdate = {
@@ -198,9 +204,16 @@ function UserModal({ editTarget, onClose, onSaved }: UserModalProps) {
 
           {/* Error message */}
           {formError && (
-            <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
-              {formError}
-            </p>
+            <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg flex items-center justify-between">
+              <span className="text-sm">{formError}</span>
+              <button
+                type="button"
+                onClick={() => setFormError(null)}
+                className="ml-4 text-red-500 hover:text-red-700 font-medium text-sm"
+              >
+                ✕
+              </button>
+            </div>
           )}
 
           {/* Actions */}
