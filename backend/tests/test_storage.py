@@ -10,6 +10,7 @@ Ciclo TDD:
 """
 
 import pytest
+from google.cloud.exceptions import NotFound
 
 from app.services.storage import StorageService
 
@@ -36,7 +37,7 @@ class FakeBlob:
     def delete(self) -> None:
         if self.name not in self._store:
             # Mimics GCS NotFound — a implementação real deve engolir este erro
-            raise Exception(f"Blob não encontrado: {self.name}")
+            raise NotFound(f"Object {self.name} not found")
         del self._store[self.name]
 
     def exists(self) -> bool:

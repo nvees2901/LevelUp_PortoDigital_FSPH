@@ -5,6 +5,7 @@ Encapsula o cliente GCS síncrono em métodos async via asyncio.to_thread.
 Usa Application Default Credentials (ADC) — funciona automaticamente no Cloud Run.
 """
 import asyncio
+from google.cloud.exceptions import NotFound
 from app.core.config import settings
 from app.utils.logging import get_logger
 
@@ -53,8 +54,8 @@ class StorageService:
             blob = bucket.blob(object_name)
             try:
                 blob.delete()
-            except Exception:
-                pass  # silencioso — equivalente a rm -f
+            except NotFound:
+                pass  # silencioso — objeto já não existe
         await asyncio.to_thread(_delete)
         logger.debug("GCS delete: %s", object_name)
 
