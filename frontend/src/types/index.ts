@@ -34,7 +34,30 @@ export interface UserOut {
   nome: string;
   setor_id: SetorId;
   subunidade: string | null;
+  ativo: boolean;
   is_admin: boolean;
+}
+
+export interface UserCreate {
+  matricula: string;
+  senha: string;
+  nome: string;
+  setor_id: SetorId;
+  subunidade?: string | null;
+  is_admin?: boolean;
+}
+
+export interface UserUpdate {
+  nome?: string;
+  setor_id?: SetorId;
+  subunidade?: string | null;
+  ativo?: boolean;
+  is_admin?: boolean;
+}
+
+export interface UserList {
+  items: UserOut[];
+  total: number;
 }
 
 export interface LoginResponse {
@@ -253,7 +276,7 @@ export interface WorkflowEventOut {
 }
 
 // Navigation
-export type TelaId = 'dashboard' | 'lista' | 'detalhe' | 'chat' | 'analise' | 'admin';
+export type TelaId = 'dashboard' | 'lista' | 'detalhe' | 'chat' | 'analise' | 'admin' | 'usuarios';
 
 export interface MensagemChat {
   de: 'ia' | 'user';

@@ -1,4 +1,4 @@
-import { PieChart, FileText, Bot, LogOut, Brain } from 'lucide-react';
+import { PieChart, FileText, Bot, LogOut, Brain, Users } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import type { TelaId } from '../../types';
 
@@ -29,6 +29,7 @@ export default function Sidebar({ telaAtual, navegar }: SidebarProps) {
         {btn('dashboard', 'Dashboard', PieChart)}
         {btn('lista', 'Processos', FileText)}
         {usuario.is_admin && btn('admin', 'Base de Conhecimento IA', Brain)}
+        {usuario.is_admin && btn('usuarios', 'Usuários', Users)}
         <div className="pt-4 pb-1">
           <p className="text-xs uppercase text-slate-400 font-bold px-2 tracking-wider">Assistente IA</p>
         </div>
