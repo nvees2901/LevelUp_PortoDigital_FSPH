@@ -39,6 +39,21 @@ def _extract_pdf_text(file_path: Path) -> str:
             parts.append(text)
     return "\n".join(parts)
 
+
+def _extract_pdf_text_from_bytes(pdf_bytes_io) -> str:
+    """
+    Extrai texto de PDF a partir de um objeto BytesIO (sem acesso ao disco).
+    Usa pypdf/PdfReader — mesma lib que _extract_pdf_text.
+    """
+    from pypdf import PdfReader
+    reader = PdfReader(pdf_bytes_io)
+    parts = []
+    for page in reader.pages:
+        text = page.extract_text()
+        if text:
+            parts.append(text)
+    return "\n".join(parts)
+
 logger = get_logger(__name__)
 
 
@@ -396,7 +411,7 @@ class RagService:
 
     @classmethod
     async def index_uploaded_document(
-        cls, storage_path: str, filename: str, collection: str = "context_extra"
+        cls, file_bytes: bytes, filename: str, collection: str = "context_extra"
     ) -> int:
         """Indexa um documento de contexto na coleção informada."""
         if not settings.RAG_ENABLED:
@@ -409,16 +424,13 @@ class RagService:
             lambda: cls._client.get_or_create_collection(name=collection)
         )
 
-        file_path = Path(storage_path)
-
-        if file_path.suffix.lower() == ".txt":
-            text = await asyncio.to_thread(
-                lambda: file_path.read_text(encoding="utf-8")
-            )
-        elif file_path.suffix.lower() == ".pdf":
-            text = await asyncio.to_thread(_extract_pdf_text, file_path)
+        import io
+        filename_lower = filename.lower()
+        if filename_lower.endswith(".txt"):
+            text = file_bytes.decode("utf-8")
+        elif filename_lower.endswith(".pdf"):
+            text = await asyncio.to_thread(_extract_pdf_text_from_bytes, io.BytesIO(file_bytes))
         else:
-            file_bytes = await asyncio.to_thread(file_path.read_bytes)
             from app.services.document import DocumentService
             text = await asyncio.to_thread(
                 DocumentService.extract_text_sync, file_bytes, filename
