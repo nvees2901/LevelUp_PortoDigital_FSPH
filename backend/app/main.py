@@ -22,7 +22,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from app.api.routes import admin, analysis, auth, chat, dashboard, terms, upload, workflow
+from app.api.routes import admin, analysis, auth, chat, dashboard, terms, upload, users, workflow
 from app.core.config import settings
 from app.core.database import engine
 from app.utils.exceptions import register_exception_handlers
@@ -263,6 +263,7 @@ app.include_router(analysis.router,  prefix=API_V1_PREFIX)
 app.include_router(chat.router,      prefix=API_V1_PREFIX)
 app.include_router(dashboard.router, prefix=API_V1_PREFIX)
 app.include_router(admin.router,     prefix=API_V1_PREFIX)  # POST/GET/DELETE /admin/context-documents
+app.include_router(users.router,     prefix=API_V1_PREFIX)  # GET/POST/PUT/DELETE /admin/users
 
 
 # ------------------------------------------------------------------ #

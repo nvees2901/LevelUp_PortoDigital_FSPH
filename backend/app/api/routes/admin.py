@@ -13,15 +13,14 @@ GET    /api/v1/admin/knowledge-base/collections    → estatísticas das coleç�
 """
 
 import asyncio
-import os
+import io as _io
 import re
 import uuid
-from pathlib import Path
+from pathlib import Path as _Path
 from typing import Annotated, Literal
 
-import aiofiles
 from fastapi import APIRouter, BackgroundTasks, Depends, Form, HTTPException, UploadFile, status
-from fastapi.responses import FileResponse
+from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
@@ -38,11 +37,26 @@ from app.schemas.context_document import (
 )
 from app.services.document import DocumentService
 from app.services.rag_service import RagService
+from app.services.storage import storage_service
 from app.utils.logging import get_logger
 
 logger = get_logger(__name__)
 
 router = APIRouter(prefix="/admin", tags=["Admin"])
+
+
+async def _load_doc_bytes(doc) -> bytes:
+    """Carrega os bytes de um documento — local (seed) ou GCS (upload)."""
+    if doc.is_seed:
+        return await asyncio.to_thread(_Path(doc.storage_path).read_bytes)
+    return await storage_service.download(doc.storage_path)
+
+
+async def _doc_exists(doc) -> bool:
+    """Verifica se o arquivo de um documento existe — local (seed) ou GCS (upload)."""
+    if doc.is_seed:
+        return _Path(doc.storage_path).exists()
+    return await storage_service.exists(doc.storage_path)
 
 DbDep = Annotated[AsyncSession, Depends(get_db)]
 
@@ -70,7 +84,7 @@ def _doc_to_response(doc) -> ContextDocumentResponse:
 
 
 async def _run_indexing_task(
-    doc_id: str, storage_path: str, filename: str, collection: str = "prompt"
+    doc_id: str, filename: str, collection: str = "prompt"
 ) -> None:
     """Indexa um documento no ChromaDB e atualiza o status no banco."""
     from app.core.database import AsyncSessionLocal
@@ -80,7 +94,8 @@ async def _run_indexing_task(
         if not bg_doc:
             return
         try:
-            chunks = await RagService.index_uploaded_document(storage_path, filename, collection)
+            file_bytes = await _load_doc_bytes(bg_doc)
+            chunks = await RagService.index_uploaded_document(file_bytes, filename, collection)
             await ContextDocumentRepository.mark_indexed(bg_db, bg_doc, chunks)
             await bg_db.commit()
             logger.info("Documento indexado: %s em %s (%d chunks)", filename, collection, chunks)
@@ -103,7 +118,7 @@ async def upload_context_document(
 ):
     """Upload de documento de contexto para a base de conhecimento da IA."""
     filename = file.filename or "documento"
-    ext = Path(filename).suffix.lower()
+    ext = _Path(filename).suffix.lower()
     if ext not in ALLOWED_EXTENSIONS:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
@@ -119,13 +134,9 @@ async def upload_context_document(
             detail=f"Arquivo muito grande: {size_bytes / 1024 / 1024:.1f} MB. Máximo: {settings.CONTEXT_DOC_MAX_SIZE_MB} MB",
         )
 
-    storage_dir = Path(settings.CONTEXT_DOCS_DIR)
-    storage_dir.mkdir(parents=True, exist_ok=True)
     unique_filename = f"{uuid.uuid4()}{ext}"
-    storage_path = str(storage_dir / unique_filename)
-
-    async with aiofiles.open(storage_path, "wb") as f:
-        await f.write(file_bytes)
+    object_name = f"context_documents/{unique_filename}"
+    storage_path = await storage_service.upload(file_bytes, object_name, file.content_type or "application/octet-stream")
 
     doc = await ContextDocumentRepository.create(db, {
         "filename": unique_filename,
@@ -141,7 +152,7 @@ async def upload_context_document(
     await db.refresh(doc)
 
     background_tasks.add_task(
-        _run_indexing_task, str(doc.id), doc.storage_path, doc.filename, doc.collection
+        _run_indexing_task, str(doc.id), doc.filename, doc.collection
     )
 
     return _doc_to_response(doc)
@@ -168,10 +179,6 @@ async def create_text_context_document(
     safe_title = re.sub(r'[^\w\s-]', '', payload.title).strip().replace(' ', '_')[:50]
     unique_filename = f"{uuid.uuid4()}_{safe_title}.txt"
 
-    storage_dir = Path(settings.CONTEXT_DOCS_DIR)
-    storage_dir.mkdir(parents=True, exist_ok=True)
-    storage_path = str(storage_dir / unique_filename)
-
     size_bytes = len(payload.content.encode("utf-8"))
     max_bytes = settings.CONTEXT_DOC_MAX_SIZE_MB * 1024 * 1024
     if size_bytes > max_bytes:
@@ -180,14 +187,10 @@ async def create_text_context_document(
             detail=f"Texto muito grande: {size_bytes / 1024 / 1024:.1f} MB. Máximo: {settings.CONTEXT_DOC_MAX_SIZE_MB} MB",
         )
 
-    try:
-        async with aiofiles.open(storage_path, "w", encoding="utf-8") as f:
-            await f.write(payload.content)
-    except OSError as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Falha ao salvar arquivo: {e}",
-        )
+    object_name = f"context_documents/{unique_filename}"
+    storage_path = await storage_service.upload(
+        payload.content.encode("utf-8"), object_name, "text/plain"
+    )
 
     doc = await ContextDocumentRepository.create(db, {
         "filename": unique_filename,
@@ -203,7 +206,7 @@ async def create_text_context_document(
     await db.refresh(doc)
 
     background_tasks.add_task(
-        _run_indexing_task, str(doc.id), doc.storage_path, doc.filename, doc.collection
+        _run_indexing_task, str(doc.id), doc.filename, doc.collection
     )
 
     return _doc_to_response(doc)
@@ -217,10 +220,7 @@ async def delete_context_document(doc_id: str, db: DbDep, current_user: AdminUse
         raise HTTPException(status_code=404, detail="Documento não encontrado.")
 
     if not doc.is_seed:
-        try:
-            await asyncio.to_thread(os.remove, doc.storage_path)
-        except FileNotFoundError:
-            logger.warning("Arquivo não encontrado ao deletar: %s", doc.storage_path)
+        await storage_service.delete(doc.storage_path)
 
     await asyncio.to_thread(RagService.remove_document_chunks, doc.filename, doc.collection)
 
@@ -246,7 +246,7 @@ async def reindex_context_document(
             detail="Documento inativo não pode ser re-indexado. Reative-o primeiro.",
         )
 
-    if not Path(doc.storage_path).exists():
+    if not await _doc_exists(doc):
         raise HTTPException(
             status_code=410,
             detail="Arquivo físico não encontrado no storage. Remova e faça upload novamente.",
@@ -257,7 +257,7 @@ async def reindex_context_document(
     await db.refresh(doc)
 
     background_tasks.add_task(
-        _run_indexing_task, str(doc.id), doc.storage_path, doc.filename, doc.collection
+        _run_indexing_task, str(doc.id), doc.filename, doc.collection
     )
 
     return _doc_to_response(doc)
@@ -270,16 +270,16 @@ async def download_context_document(doc_id: str, db: DbDep, current_user: AdminU
     if not doc:
         raise HTTPException(status_code=404, detail="Documento não encontrado.")
 
-    if not Path(doc.storage_path).exists():
+    if not await _doc_exists(doc):
         raise HTTPException(
             status_code=410,
-            detail="Arquivo físico não encontrado no storage.",
+            detail="Arquivo nao encontrado no storage.",
         )
-
-    return FileResponse(
-        path=doc.storage_path,
-        filename=doc.original_filename,
+    file_bytes = await _load_doc_bytes(doc)
+    return StreamingResponse(
+        _io.BytesIO(file_bytes),
         media_type=doc.mime_type,
+        headers={"Content-Disposition": f'attachment; filename="{doc.original_filename}"'},
     )
 
 
@@ -290,10 +290,10 @@ async def preview_context_document(doc_id: str, db: DbDep, current_user: AdminUs
     if not doc:
         raise HTTPException(status_code=404, detail="Documento não encontrado.")
 
-    if not Path(doc.storage_path).exists():
+    if not await _doc_exists(doc):
         raise HTTPException(
             status_code=410,
-            detail="Arquivo físico não encontrado no storage.",
+            detail="Arquivo nao encontrado no storage.",
         )
 
     if doc.mime_type == "application/pdf":
@@ -304,12 +304,10 @@ async def preview_context_document(doc_id: str, db: DbDep, current_user: AdminUs
 
     PREVIEW_LIMIT = 3000
 
+    file_bytes = await _load_doc_bytes(doc)
     if doc.mime_type == "text/plain":
-        text = await asyncio.to_thread(
-            Path(doc.storage_path).read_text, "utf-8"
-        )
+        text = file_bytes.decode("utf-8")
     else:
-        file_bytes = await asyncio.to_thread(Path(doc.storage_path).read_bytes)
         text = await asyncio.to_thread(
             DocumentService.extract_text_sync, file_bytes, doc.filename
         )
@@ -360,7 +358,7 @@ async def activate_context_document(
         raise HTTPException(status_code=404, detail="Documento não encontrado.")
     if doc.is_active:
         raise HTTPException(status_code=409, detail="Documento já está ativo.")
-    if not Path(doc.storage_path).exists():
+    if not await _doc_exists(doc):
         raise HTTPException(
             status_code=410,
             detail="Arquivo físico não encontrado no storage. Remova e faça upload novamente.",
@@ -372,7 +370,7 @@ async def activate_context_document(
     await db.refresh(doc)
 
     background_tasks.add_task(
-        _run_indexing_task, str(doc.id), doc.storage_path, doc.filename, doc.collection
+        _run_indexing_task, str(doc.id), doc.filename, doc.collection
     )
 
     return _doc_to_response(doc)

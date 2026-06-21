@@ -16,6 +16,10 @@ import type {
   KnowledgeBaseCollectionList,
   TermChecklistOut,
   WorkflowEventOut,
+  UserOut,
+  UserCreate,
+  UserUpdate,
+  UserList,
 } from '../types';
 
 export const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000/api/v1';
@@ -387,4 +391,28 @@ export async function fetchContextDocumentBlob(id: string): Promise<Blob> {
 export async function listChatSessions(mode?: ChatMode): Promise<ChatSessionListResponse> {
   const qs = mode ? `?mode=${encodeURIComponent(mode)}` : '';
   return request<ChatSessionListResponse>(`/chat/sessions${qs}`);
+}
+
+// --- Admin: Users ---
+
+export async function listUsers(): Promise<UserList> {
+  return request<UserList>('/admin/users');
+}
+
+export async function createUser(data: UserCreate): Promise<UserOut> {
+  return request<UserOut>('/admin/users', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+}
+
+export async function updateUser(id: string, data: UserUpdate): Promise<UserOut> {
+  return request<UserOut>(`/admin/users/${id}`, {
+    method: 'PUT',
+    body: JSON.stringify(data),
+  });
+}
+
+export async function deactivateUser(id: string): Promise<void> {
+  return request<void>(`/admin/users/${id}`, { method: 'DELETE' });
 }

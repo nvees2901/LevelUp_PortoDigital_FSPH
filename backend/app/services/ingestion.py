@@ -14,10 +14,8 @@ Por que este service existe?
     - Separa responsabilidades: routing ≠ lógica de negócio
 """
 
-import os
 import uuid
 
-import aiofiles
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
@@ -148,19 +146,13 @@ class IngestionService:
 
     @staticmethod
     async def _save_file(file_bytes: bytes, filename: str) -> str:
-        """Salva o arquivo no disco e retorna o caminho."""
-        upload_dir = settings.UPLOAD_DIR
-        os.makedirs(upload_dir, exist_ok=True)
+        """Faz upload do arquivo no GCS e retorna o object_name."""
+        from app.services.storage import storage_service
 
-        # Nome único para evitar colisões
         ext = filename.rsplit(".", 1)[-1] if "." in filename else "bin"
-        unique_name = f"{uuid.uuid4().hex}.{ext}"
-        file_path = os.path.join(upload_dir, unique_name)
-
-        async with aiofiles.open(file_path, "wb") as f:
-            await f.write(file_bytes)
-
-        return file_path
+        object_name = f"uploads/{uuid.uuid4().hex}.{ext}"
+        await storage_service.upload(file_bytes, object_name, "application/octet-stream")
+        return object_name
 
     @staticmethod
     def _extract_title(text: str, filename: str) -> str:

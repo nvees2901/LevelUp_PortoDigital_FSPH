@@ -10,6 +10,7 @@ import TermDetail from './components/Terms/TermDetail';
 import ChatView from './components/Chat/ChatView';
 import UploadView from './components/Upload/UploadView';
 import ContextDocumentsView from './components/Admin/ContextDocumentsView';
+import UsersView from './components/Admin/UsersView';
 import type { TelaId } from './types';
 
 class ErrorBoundary extends Component<{ children: ReactNode }, { error: Error | null }> {
@@ -72,6 +73,10 @@ function AppContent() {
       case 'admin':
         return usuario.is_admin
           ? <ContextDocumentsView navegar={navegar} />
+          : <DashboardView navegar={navegar} />;
+      case 'usuarios':
+        return usuario.is_admin
+          ? <UsersView navegar={navegar} />
           : <DashboardView navegar={navegar} />;
       default:
         return <DashboardView navegar={navegar} />;
