@@ -410,3 +410,25 @@ async def test_delete_seed_does_not_call_storage_delete(patched_storage, monkeyp
     # Itens no storage devem ser os mesmos — nenhuma remoção do GCS para seeds
     storage_items_after = set(patched_storage._storage.keys())
     assert storage_items_before == storage_items_after
+
+
+# ======================================================================== #
+# Teste 11: RagService.index_uploaded_document aceita bytes como primeiro arg
+# ======================================================================== #
+
+async def test_index_uploaded_document_aceita_bytes():
+    """RagService.index_uploaded_document aceita bytes como primeiro arg."""
+    # Com RAG desabilitado retorna 0 imediatamente — smoke test de assinatura
+    from app.services.rag_service import RagService
+    from app.core.config import settings
+
+    with patch.object(RagService, '_client', None):
+        original = settings.RAG_ENABLED
+        try:
+            settings.RAG_ENABLED = False
+            result = await RagService.index_uploaded_document(
+                b"conteudo de teste", "doc.txt", "context_extra"
+            )
+            assert result == 0
+        finally:
+            settings.RAG_ENABLED = original

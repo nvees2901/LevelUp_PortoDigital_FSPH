@@ -14,6 +14,7 @@ Coleções ChromaDB:
 """
 
 import asyncio
+import io
 import re
 import threading
 from pathlib import Path
@@ -424,7 +425,6 @@ class RagService:
             lambda: cls._client.get_or_create_collection(name=collection)
         )
 
-        import io
         filename_lower = filename.lower()
         if filename_lower.endswith(".txt"):
             text = file_bytes.decode("utf-8")
