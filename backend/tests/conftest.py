@@ -6,7 +6,6 @@ Define as fixtures compartilhadas (async_session, fake_storage) usadas por todos
 """
 
 from collections.abc import AsyncGenerator
-from typing import Any
 
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
@@ -33,7 +32,6 @@ async def async_session() -> AsyncGenerator[AsyncSession, None]:
       - Todas as tabelas (Base.metadata) são criadas automaticamente
 
     Uso nos testes:
-      @pytest.mark.asyncio
       async def test_criar_termo(async_session: AsyncSession):
           termo = Termo(titulo="Novo Termo")
           async_session.add(termo)
